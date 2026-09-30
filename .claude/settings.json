@@ -5,7 +5,8 @@
       "Bash(DATABASE_URL=sqlite:///C:/Users/Cyberify/AppData/Local/Temp/claude/d--mukadam-bot/e3530fab-d27e-42cb-b9fa-2455365b958d/scratchpad/t.db GOOGLE_PUBSUB_SUBSCRIPTION='' GMAIL_RECONCILE_INTERVAL_SECONDS=0 venv/Scripts/python.exe -c ' *)",
       "PowerShell($py = if \\(Test-Path .venv\\\\Scripts\\\\python.exe\\) { \".venv\\\\Scripts\\\\python.exe\" } else { \"python\" }; & $py -c \"from app.services.google_auth import gmail_client, _load_credentials; c=_load_credentials\\(\\); print\\('scopes:', c.scopes\\); print\\('profile:', gmail_client\\(\\).users\\(\\).getProfile\\(userId='me'\\).execute\\(\\)\\)\")",
       "PowerShell(python -c \"from google.oauth2.credentials import Credentials; from google.auth.transport.requests import Request; c=Credentials.from_authorized_user_file\\('credentials/token.json'\\); print\\('scopes:', c.scopes\\); print\\('expired:', c.expired, 'has_refresh:', bool\\(c.refresh_token\\)\\); c.refresh\\(Request\\(\\)\\); print\\('refresh OK'\\)\")",
-      "PowerShell(python -m py_compile app/config.py app/services/google_auth.py)"
+      "PowerShell(python -m py_compile app/config.py app/services/google_auth.py)",
+      "PowerShell(git ls-files credentials; git log --oneline -3; python -m py_compile app/services/google_auth.py; if \\($?\\) { \"compile ok\" }; \\(Get-Item credentials\\\\token.json\\).Length)"
     ]
   }
 }

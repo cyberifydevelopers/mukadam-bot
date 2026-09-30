@@ -6,6 +6,7 @@ SAME consent flow / token, since both APIs are used by this app under the
 one Google account.
 """
 
+import json
 import os
 
 import httplib2
@@ -38,14 +39,27 @@ class GoogleAuthError(Exception):
     pass
 
 
+def _token_file_usable() -> bool:
+    path = settings.google_token_file
+    if not os.path.exists(path) or os.path.getsize(path) == 0:
+        return False
+    try:
+        with open(path) as f:
+            json.load(f)
+        return True
+    except ValueError:
+        return False
+
+
 def _load_credentials() -> Credentials:
-    if not os.path.exists(settings.google_token_file) and settings.google_token_json:
+    token_json = settings.google_token_json.strip()
+    if token_json and not _token_file_usable():
         # Refreshed tokens are written back to this file below; on a host with
         # an ephemeral disk it's lost on redeploy and re-created from the env
         # var, whose refresh token still works.
         os.makedirs(os.path.dirname(settings.google_token_file) or ".", exist_ok=True)
         with open(settings.google_token_file, "w") as f:
-            f.write(settings.google_token_json)
+            f.write(token_json)
 
     if not os.path.exists(settings.google_token_file):
         raise GoogleAuthError(
@@ -59,7 +73,16 @@ def _load_credentials() -> Credentials:
     # SCOPES: refreshing a token while asking for a scope it never got fails
     # with invalid_scope — which would break Gmail too, not just Pub/Sub, for
     # a token created before a scope was added here.
-    creds = Credentials.from_authorized_user_file(settings.google_token_file)
+    try:
+        creds = Credentials.from_authorized_user_file(settings.google_token_file)
+    except ValueError as exc:
+        # Not raised as-is: a bad token must not crash app startup
+        # (pubsub_listener.start -> has_scope only catches GoogleAuthError).
+        raise GoogleAuthError(
+            f"{settings.google_token_file} is not a valid token.json ({exc}). "
+            f"GOOGLE_TOKEN_JSON is {'set, ' + str(len(token_json)) + ' chars' if token_json else 'empty'} "
+            "— it must hold the whole token.json, from { to }."
+        ) from exc
 
     if creds.expired and creds.refresh_token:
         creds.refresh(Request())
