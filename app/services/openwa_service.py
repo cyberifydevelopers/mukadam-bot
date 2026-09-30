@@ -154,8 +154,15 @@ def _sender_phone(data: dict) -> str:
     if sender.endswith("@c.us"):
         return sender.split("@", 1)[0]
     # @lid privacy id — OpenWA resolves the real number when
-    # RESOLVE_LID_TO_PHONE=true is set on the gateway.
-    phone = data.get("senderPhone") or (data.get("contact") or {}).get("number") or ""
+    # RESOLVE_LID_TO_PHONE=true is set on the gateway. Without that, a 1:1
+    # chat's chatId is still the other party's @c.us id (groups are filtered
+    # out before this is called), e.g. from "2044…@lid", chatId "92309…@c.us".
+    chat_id = data.get("chatId") or ""
+    phone = (
+        data.get("senderPhone")
+        or (data.get("contact") or {}).get("number")
+        or (chat_id.split("@", 1)[0] if chat_id.endswith("@c.us") else "")
+    )
     if not phone:
         logger.warning(
             "OpenWA message from %s carries no phone number (set RESOLVE_LID_TO_PHONE=true "
