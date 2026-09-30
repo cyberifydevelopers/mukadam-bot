@@ -1,0 +1,10 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+data/*.db
+data/pdfs/*
+!data/pdfs/.gitkeep
+credentials/client_secret.json
+credentials/token.json

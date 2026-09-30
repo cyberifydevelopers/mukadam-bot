@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mukadam Bot</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563eb'/%3E%3Cpath d='M9 8h10l5 5v11a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z' fill='white'/%3E%3Cpath d='M11 17h10M11 21h7' stroke='%232563eb' stroke-width='2'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --sidebar: #111827; --sidebar-fg: #cbd5e1; --sidebar-active: #1f2937;
+    --fg: #111827; --muted: #6b7280; --border: #e5e7eb; --accent: #2563eb; --accent-fg: #ffffff;
+    --ok: #15803d; --ok-bg: #dcfce7; --warn: #a16207; --warn-bg: #fef9c3; --bad: #b91c1c; --bad-bg: #fee2e2;
+    --info: #1d4ed8; --info-bg: #dbeafe; --neutral-bg: #f3f4f6; --credit: #15803d; --debit: #b91c1c;
+    --bubble-out: #dcf8c6; --bubble-in: #ffffff; --chat-bg: #efeae2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0f17; --panel: #131a24; --sidebar: #070a10; --sidebar-fg: #94a3b8; --sidebar-active: #1a2330;
+      --fg: #e5e7eb; --muted: #94a3b8; --border: #243042; --accent: #3b82f6;
+      --ok: #4ade80; --ok-bg: #0f2e1b; --warn: #facc15; --warn-bg: #2e2708; --bad: #f87171; --bad-bg: #3a1212;
+      --info: #93c5fd; --info-bg: #132646; --neutral-bg: #1c2533; --credit: #4ade80; --debit: #f87171;
+      --bubble-out: #144d37; --bubble-in: #1c2533; --chat-bg: #0e141c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--fg); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .layout { display: flex; min-height: 100vh; }
+
+  /* Sidebar */
+  aside { width: 232px; flex-shrink: 0; background: var(--sidebar); color: var(--sidebar-fg); display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
+  .brand { padding: 20px 20px 16px; color: #fff; font-weight: 700; font-size: 16px; letter-spacing: .2px; }
+  .brand small { display: block; font-weight: 400; color: var(--sidebar-fg); font-size: 12px; margin-top: 2px; }
+  nav a { display: flex; align-items: center; gap: 10px; padding: 10px 20px; color: var(--sidebar-fg); border-left: 3px solid transparent; }
+  nav a:hover { background: var(--sidebar-active); text-decoration: none; color: #fff; }
+  nav a.active { background: var(--sidebar-active); color: #fff; border-left-color: var(--accent); }
+  nav svg { width: 18px; height: 18px; flex-shrink: 0; }
+  nav .count { margin-left: auto; background: var(--accent); color: #fff; border-radius: 999px; font-size: 11px; padding: 0 7px; min-width: 20px; text-align: center; }
+  .sidebar-foot { margin-top: auto; padding: 16px 20px; font-size: 12px; border-top: 1px solid #1f2937; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--muted); }
+  .dot.ok { background: #22c55e; } .dot.bad { background: #ef4444; } .dot.warn { background: #eab308; }
+
+  /* Main */
+  main { flex: 1; min-width: 0; padding: 24px 32px 48px; }
+  header.page { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  header.page h1 { font-size: 20px; margin: 0; }
+  header.page .sub { color: var(--muted); font-size: 13px; }
+  header.page .actions { margin-left: auto; display: flex; gap: 8px; }
+  button, .btn { font: inherit; border: 1px solid var(--border); background: var(--panel); color: var(--fg); padding: 7px 14px; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  button:hover, .btn:hover { border-color: var(--accent); text-decoration: none; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  button:disabled { opacity: .6; cursor: wait; }
+  button.danger { color: var(--bad); }
+  button.danger:hover { border-color: var(--bad); background: var(--bad-bg); }
+  button.icon { padding: 3px 8px; }
+
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 20px; }
+  .panel > h2 { font-size: 14px; margin: 0; padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+  .panel > h2 .right { margin-left: auto; font-weight: 400; color: var(--muted); font-size: 13px; }
+  .panel-body { padding: 16px 18px; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
+  .card .value { font-size: 26px; font-weight: 700; margin-top: 4px; }
+  .card .hint { color: var(--muted); font-size: 12px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .4px; background: var(--neutral-bg); position: sticky; top: 0; }
+  tr:last-child td { border-bottom: none; }
+  tr.click { cursor: pointer; }
+  tr.click:hover td { background: var(--neutral-bg); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .table-wrap { overflow-x: auto; }
+  .activity-scroll { overflow-y: auto; }
+  .scroll { max-height: 560px; overflow: auto; }
+  .muted { color: var(--muted); }
+  .nowrap { white-space: nowrap; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12.5px; }
+  .ellipsis { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--neutral-bg); color: var(--muted); }
+  .badge.ok { background: var(--ok-bg); color: var(--ok); }
+  .badge.warn { background: var(--warn-bg); color: var(--warn); }
+  .badge.bad { background: var(--bad-bg); color: var(--bad); }
+  .badge.info { background: var(--info-bg); color: var(--info); }
+
+  .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px 24px; }
+  .kv div .k { color: var(--muted); font-size: 12px; }
+  .kv div .v { font-weight: 600; word-break: break-word; }
+  .kv div .v.empty { color: var(--muted); font-weight: 400; font-style: italic; }
+  .alert { padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; font-size: 13px; }
+  .alert.bad { background: var(--bad-bg); color: var(--bad); }
+  .alert.warn { background: var(--warn-bg); color: var(--warn); }
+  .alert.info { background: var(--info-bg); color: var(--info); }
+  pre.text { margin: 0; padding: 14px; max-height: 480px; overflow: auto; background: var(--neutral-bg); border-radius: 8px; white-space: pre-wrap; font-size: 12px; }
+  details summary { cursor: pointer; padding: 14px 18px; font-weight: 600; }
+  details[open] summary { border-bottom: 1px solid var(--border); }
+  .empty-state { padding: 40px; text-align: center; color: var(--muted); }
+  .credit { color: var(--credit); } .debit { color: var(--debit); }
+  .steps { display: flex; flex-wrap: wrap; gap: 4px; }
+  .step { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; font-size: 12px; white-space: nowrap; background: var(--neutral-bg); color: var(--muted); }
+  .step.done { background: var(--ok-bg); color: var(--ok); }
+  .step.active { background: var(--info-bg); color: var(--info); font-weight: 600; }
+  .step.failed { background: var(--bad-bg); color: var(--bad); font-weight: 600; }
+  .step.skip { background: var(--neutral-bg); color: var(--muted); text-decoration: none; }
+  .step.todo { opacity: .55; }
+  .spin { width: 10px; height: 10px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; display: inline-block; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  tr.live td { background: var(--info-bg); }
+  .pulse { width: 9px; height: 9px; border-radius: 50%; background: #22c55e; display: inline-block; animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .chip { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); color: var(--fg); font-size: 13px; }
+  .chip span { color: var(--muted); margin-left: 4px; }
+  .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .chip.active span { color: #dbeafe; }
+  .chip:hover { text-decoration: none; border-color: var(--accent); }
+
+  /* WhatsApp chat */
+  .chat { background: var(--chat-bg); padding: 16px; display: flex; flex-direction: column; gap: 8px; border-radius: 0 0 12px 12px; max-height: 620px; overflow: auto; }
+  .bubble { max-width: 72%; padding: 8px 10px 4px; border-radius: 10px; background: var(--bubble-in); align-self: flex-start; box-shadow: 0 1px 1px rgba(0,0,0,.08); }
+  .bubble.out { background: var(--bubble-out); align-self: flex-end; }
+  .bubble .body { white-space: pre-wrap; word-break: break-word; }
+  .bubble .meta { font-size: 11px; color: var(--muted); text-align: right; margin-top: 2px; display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+  .bubble .err { color: var(--bad); font-size: 12px; margin-top: 4px; }
+  .ticks { font-weight: 700; letter-spacing: -3px; padding-right: 3px; }
+  .ticks.read { color: #34b7f1; } .ticks.failed { color: var(--bad); letter-spacing: 0; }
+
+  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; }
+  .toast.show { opacity: 1; }
+
+  @media (max-width: 800px) {
+    .layout { flex-direction: column; }
+    aside { width: 100%; height: auto; position: static; }
+    nav { display: flex; overflow-x: auto; }
+    nav a { border-left: none; border-bottom: 3px solid transparent; padding: 10px 14px; white-space: nowrap; }
+    nav a.active { border-bottom-color: var(--accent); }
+    .sidebar-foot { display: none; }
+    main { padding: 16px; }
+    .bubble { max-width: 90%; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <div class="brand">Mukadam Bot<small>Bank invoice pipeline</small></div>
+    <nav id="nav">
+      <a href="#overview" data-tab="overview">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+        Overview</a>
+      <a href="#emails" data-tab="emails">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>
+        Emails <span class="count" id="count-emails" hidden></span></a>
+      <a href="#whatsapp" data-tab="whatsapp">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.4 8.4 0 0 1-12.3 7.4L3 21l2.1-5.6A8.4 8.4 0 1 1 21 11.5z"/></svg>
+        WhatsApp</a>
+      <a href="#settings" data-tab="settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        Settings</a>
+    </nav>
+    <div class="sidebar-foot" id="foot">
+      <div><span class="dot" id="dot-gmail"></span>Gmail <span id="foot-gmail" class="muted"></span></div>
+      <div><span class="dot" id="dot-wa"></span>WhatsApp <span id="foot-wa" class="muted"></span></div>
+    </div>
+  </aside>
+  <main id="main"></main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (sel, el = document) => el.querySelector(sel);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const main = $("#main");
+const contentCache = {};
+
+async function api(path, opts = {}) {
+  const init = { method: opts.method || "GET" };
+  if (opts.body !== undefined) { init.body = JSON.stringify(opts.body); init.headers = { "Content-Type": "application/json" }; }
+  const res = await fetch("/api" + path, init);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+  return body;
+}
+
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 3000);
+}
+
+const fmtTime = (iso) => iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "—";
+const ago = (iso) => {
+  if (!iso) return "never";
+  const s = Math.round((Date.now() - new Date(iso)) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return Math.round(s / 60) + " min ago";
+  if (s < 86400) return Math.round(s / 3600) + " h ago";
+  return Math.round(s / 86400) + " d ago";
+};
+const money = (n) => n == null ? "" : Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const senderName = (from) => { const m = /^\s*"?([^"<]+?)"?\s*<([^>]+)>/.exec(from || ""); return m ? { name: m[1], addr: m[2] } : { name: from, addr: "" }; };
+
+const STATUS = {
+  PENDING_CONFIRMATION: ["Awaiting reply", "info"],
+  CONFIRMED: ["Saved to sheet", "ok"],
+  REJECTED: ["Rejected", "warn"],
+  FAILED_PARSE: ["Parse failed", "bad"],
+  UNKNOWN_BANK: ["Unknown bank", "warn"],
+  SEND_FAILED: ["WhatsApp failed", "bad"],
+  STATEMENT: ["Statement · not tracked", ""],
+  NOT_BANK: ["Not a bank document", ""],
+};
+const VERDICT = { bank: ["Bank", "ok"], not_bank: ["Not bank", ""], unsure: ["Unsure", "warn"] };
+const verdictBadge = (v) => { if (!v) return `<span class="muted">—</span>`; const [l, c] = VERDICT[v] || [v, ""]; return `<span class="badge ${c}">${esc(l)}</span>`; };
+const statusBadge = (s) => { const [label, cls] = STATUS[s] || [s, ""]; return `<span class="badge ${cls}">${esc(label)}</span>`; };
+
+function ticks(status) {
+  if (status === "failed") return `<span class="ticks failed">✕</span>`;
+  if (status === "read") return `<span class="ticks read">✓✓</span>`;
+  if (status === "delivered") return `<span class="ticks">✓✓</span>`;
+  if (status === "sent") return `<span class="ticks">✓</span>`;
+  return "";
+}
+const MSG_STATUS = { sent: ["Sent", ""], delivered: ["Delivered", "info"], read: ["Read", "ok"], failed: ["Failed", "bad"], received: ["Received", "info"] };
+const msgBadge = (s) => { const [l, c] = MSG_STATUS[s] || [s, ""]; return `<span class="badge ${c}">${esc(l)}</span>`; };
+
+function pageHeader(title, sub, actions = "") {
+  return `<header class="page"><div><h1>${esc(title)}</h1>${sub ? `<div class="sub">${sub}</div>` : ""}</div><div class="actions">${actions}</div></header>`;
+}
+const syncButton = `<button class="primary" data-action="sync">↻ Check Gmail now</button>`;
+
+function chat(messages) {
+  if (!messages.length) return `<div class="chat"><div class="muted" style="text-align:center">No WhatsApp messages yet.</div></div>`;
+  return `<div class="chat">${messages.map((m) => `
+    <div class="bubble ${m.direction === "out" ? "out" : ""}">
+      <div class="body">${esc(m.text)}</div>
+      ${m.error ? `<div class="err">${esc(m.error)}</div>` : ""}
+      <div class="meta">
+        ${m.direction === "in" ? `from ${esc(m.peer_number || "?")} ·` : `to ${esc(m.peer_number || "?")} ·`}
+        ${m.transaction_id ? `<a href="#invoice/${m.invoice_id}">T${m.transaction_id}</a> ·` : m.invoice_id ? `<a href="#invoice/${m.invoice_id}">#${m.invoice_id}</a> ·` : ""}
+        ${esc(fmtTime(m.created_at))} ${m.direction === "out" ? ticks(m.status) : ""}
+      </div>
+    </div>`).join("")}</div>`;
+}
+
+/* ---------- Live activity (Overview) ---------- */
+
+// True while any email is mid-processing: the page then refreshes every 3 s.
+let processingActive = false;
+const ACTIVE_STAGES = ["reading", "analyzing", "sending"];
+
+// One step of the progress bar: state is done / active / failed / skip / todo.
+const step = (state, label, title = "") =>
+  `<span class="step ${state}" title="${esc(title)}">${state === "done" ? "✓" : state === "failed" ? "✕" : state === "active" ? `<i class="spin"></i>` : state === "skip" ? "–" : "○"} ${label}</span>`;
+
+function progressSteps(e) {
+  const s = e.stage;
+  const steps = [step("done", "Received", fmtTime(e.received_at))];
+  // Finished, but its extracted files were deleted from the dashboard since.
+  if ((s === "done" || s === "legacy") && !e.documents.length) return [...steps, step("skip", "File deleted")];
+  if (s === "no_attachment") return [...steps, step("skip", "Skipped — no attachment", e.stage_detail)];
+  if (s === "reading") return [...steps, step("active", "Opening file…"), step("todo", "Bank document?"), step("todo", "WhatsApp"), step("todo", "Reply")];
+  steps.push(step("done", "File read", e.attachments.join(", ")));
+
+  // One LLM read of the document decides bank / not bank AND extracts the data.
+  if (s === "analyzing") {
+    const scanning = /scann|vision/i.test(e.stage_detail || "");
+    return [...steps, step("active", scanning ? "Scanning PDF…" : "Reading document…", e.stage_detail), step("todo", "WhatsApp"), step("todo", "Reply")];
+  }
+  if (s === "not_bank") return [...steps, step("skip", "Not a bank document", e.classification_reason)];
+  if (s === "failed") {
+    const read = e.documents.some((d) => d.status !== "FAILED_PARSE");
+    return [...steps, step("failed", read ? "Failed" : "Couldn't read document", e.stage_detail)];
+  }
+  steps.push(step("done", e.bank_name ? `Bank document · ${esc(e.bank_name)}` : "Bank document", e.classification_reason));
+  steps.push(step("done", "Data extracted"));
+
+  // WhatsApp + reply (the first document that got a prompt)
+  const d = e.documents.find((x) => x.whatsapp) || e.documents.find((x) => x.status === "SEND_FAILED") || e.documents[0];
+  if (s === "sending") return [...steps, step("active", "Sending WhatsApp…"), step("todo", "Reply")];
+  if (!d || d.status === "STATEMENT") return [...steps, step("skip", "Statement · not tracked")];
+  if (d.status === "SEND_FAILED" || d.whatsapp === "failed") return [...steps, step("failed", "WhatsApp failed")];
+  if (!d.whatsapp) return [...steps, step("todo", "WhatsApp")];
+  steps.push(step("done", { sent: "WhatsApp sent ✓", delivered: "Delivered ✓✓", read: "Read ✓✓" }[d.whatsapp] || "WhatsApp sent"));
+  steps.push(d.status === "CONFIRMED" ? step("done", "Saved to sheet") : d.status === "REJECTED" ? step("skip", "Skipped by you")
+    : step("active", "Waiting for your YES / NO"));
+  return steps;
+}
+
+// Where the time went, measured from Gmail's own receive time:
+// Google → Pub/Sub notification, our pickup, and processing.
+function timing(e) {
+  const t = (iso) => (iso ? new Date(iso).getTime() : null);
+  const secs = (a, b) => (a != null && b != null ? Math.max(0, Math.round((b - a) / 1000)) : null);
+  const got = t(e.received_at), notified = t(e.notification_received_at), picked = t(e.processed_at);
+  const finished = ["done", "not_bank", "no_attachment", "failed"].includes(e.stage) ? t(e.stage_updated_at) : null;
+  const parts = [];
+  const n = secs(got, notified), p = secs(notified ?? got, picked), f = secs(picked, finished);
+  if (n != null) parts.push(`Google notified +${n}s`);
+  if (p != null) parts.push(`picked up +${p}s`);
+  if (f != null) parts.push(`processed in ${f}s`);
+  return parts.length ? `<div class="muted" style="font-size:11px;margin-top:2px" title="Measured from when Gmail received the email">${parts.join(" · ")}</div>` : "";
+}
+
+function docSummary(d) {
+  const amount = d.amount ? `${d.currency || "PKR"} ${Number(d.amount).toLocaleString()}` : null;
+  const what = d.kind === "statement" ? `Statement · ${d.transactions} transactions`
+    : [d.document_type, d.reference && `Ref ${d.reference}`, amount].filter(Boolean).join(" · ");
+  return `<div><a href="#invoice/${d.id}">${esc(d.filename)}</a> ${statusBadge(d.status)}</div>${what ? `<div class="muted" style="font-size:12px">${esc(what)}</div>` : ""}`;
+}
+
+const SELECTION = {
+  selected: ["Selected", "ok"],
+  rejected: ["Rejected", ""],
+  processing: ["Processing", "info"],
+  failed: ["Failed", "bad"],
+  deleted: ["File deleted", ""],
+};
+const selectionBadge = (v) => { const [l, c] = SELECTION[v] || [v, ""]; return `<span class="badge ${c}">${esc(l)}</span>`; };
+
+function activityPanel(all, pubsubState, filter) {
+  processingActive = all.some((e) => ACTIVE_STAGES.includes(e.stage));
+  const listening = pubsubState === "listening";
+  const count = (v) => all.filter((e) => e.selection === v).length;
+  const tabs = [["", "All", all.length], ["selected", "Selected", count("selected")], ["rejected", "Rejected", count("rejected")]];
+  if (count("processing")) tabs.push(["processing", "Processing", count("processing")]);
+  if (count("failed")) tabs.push(["failed", "Failed", count("failed")]);
+  const list = filter ? all.filter((e) => e.selection === filter) : all;
+
+  const rows = list.map((e) => {
+    const s = senderName(e.sender);
+    const reason = e.selection === "rejected" && (e.classification_reason || e.stage_detail);
+    return `<tr class="${ACTIVE_STAGES.includes(e.stage) ? "live" : ""}">
+      <td class="nowrap"><div>${esc(ago(e.received_at))}</div><div class="muted" style="font-size:12px">${esc(fmtTime(e.received_at))}</div>${timing(e)}</td>
+      <td><div><b>${esc(e.subject || "(no subject)")}</b></div><div class="muted" style="font-size:12px">${esc(s.name)}${e.attachments.length ? " · 📎 " + esc(e.attachments.join(", ")) : ""}</div></td>
+      <td>${selectionBadge(e.selection)}</td>
+      <td><div class="steps">${progressSteps(e).join("")}</div>
+        ${e.stage === "failed" ? `<div class="debit" style="font-size:12px;margin-top:4px">${esc(e.stage_detail)} <button class="icon" data-action="retry" data-id="${e.id}">↻ Retry</button></div>`
+          : ACTIVE_STAGES.includes(e.stage) && e.stage_detail ? `<div class="muted" style="font-size:12px;margin-top:4px">${esc(e.stage_detail)}</div>`
+          : reason ? `<div class="muted" style="font-size:12px;margin-top:4px">Why: ${esc(reason)}</div>` : ""}</td>
+      <td>${e.documents.map(docSummary).join("") || `<span class="muted">—</span>`}</td>
+    </tr>`;
+  }).join("");
+  return `<div class="panel"><h2>${listening ? `<span class="pulse"></span>` : ""}Incoming emails
+      <span class="right">${listening ? "Listening for new mail (Pub/Sub). New emails appear here within seconds" : "Pub/Sub not active: checking every few minutes"}</span></h2>
+    <div class="panel-body" style="padding-bottom:0"><div class="chips">${tabs.map(([v, l, n]) =>
+      `<a class="chip ${(filter || "") === v ? "active" : ""}" href="#overview${v ? "/" + v : ""}">${esc(l)} <span>${n}</span></a>`).join("")}</div></div>
+    ${list.length ? `<div class="table-wrap activity-scroll"><table>
+      <thead><tr><th>Received</th><th>Email</th><th>Status</th><th>Progress</th><th>Result</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`
+      : `<div class="empty-state">${filter ? "No emails here." : "No emails yet. Send one with a PDF or Excel attachment and it shows up here as it's processed."}</div>`}
+  </div>`;
+}
+
+/* ---------- Views ---------- */
+
+const views = {
+  async overview(filter) {
+    const [o, s, act] = await Promise.all([api("/overview"), api("/status"), api("/activity")]);
+    const inv = o.invoices;
+    const tx = o.transactions;
+    const out = o.whatsapp_out;
+    const sentTotal = Object.values(out).reduce((a, b) => a + b, 0);
+    const wa = s.whatsapp.openwa;
+    return pageHeader("Overview", "Emails in → PDF extracted → WhatsApp confirmation → Google Sheet", syncButton) + `
+      <div class="cards">
+        <div class="card"><div class="label">Emails fetched</div><div class="value">${o.emails}</div><div class="hint">with PDF attachments</div></div>
+        <div class="card"><div class="label">Awaiting reply</div><div class="value">${inv.PENDING_CONFIRMATION + tx.PENDING_CONFIRMATION}</div><div class="hint">${tx.PENDING_CONFIRMATION} statement rows</div></div>
+        <div class="card"><div class="label">Saved to sheet</div><div class="value">${inv.CONFIRMED + tx.CONFIRMED}</div><div class="hint">${inv.REJECTED + tx.REJECTED} skipped</div></div>
+        <div class="card"><div class="label">Problems</div><div class="value">${inv.FAILED_PARSE + inv.SEND_FAILED + tx.SEND_FAILED + inv.UNKNOWN_BANK}</div><div class="hint">${inv.FAILED_PARSE} parse · ${inv.SEND_FAILED + tx.SEND_FAILED} send · ${inv.UNKNOWN_BANK} unknown bank</div></div>
+        <div class="card"><div class="label">WhatsApp sent</div><div class="value">${sentTotal}</div><div class="hint">${out.delivered || 0} delivered · ${out.read || 0} read · ${out.failed || 0} failed</div></div>
+      </div>
+      ${activityPanel(act, s.gmail.pubsub.state, filter)}
+      <div class="panel"><h2>System status</h2><div class="panel-body kv">
+        <div><div class="k">Gmail last sync</div><div class="v">${s.gmail.initialized ? esc(ago(s.gmail.last_sync_at)) : "not started"}</div></div>
+        <div><div class="k">New mail detection</div><div class="v">${s.gmail.pubsub.state === "listening" ? `<span class="badge ok">Instant (Pub/Sub)</span>` : `<span class="badge warn">Fallback: every ${Math.round(s.gmail.reconcile_interval_seconds / 60)} min</span>`}</div>${s.gmail.pubsub.state !== "listening" && s.gmail.pubsub.detail ? `<div class="muted" style="font-size:12px">${esc(s.gmail.pubsub.detail)}</div>` : ""}</div>
+        <div><div class="k">WhatsApp</div><div class="v">${wa ? `${esc(wa.status)}${wa.phone ? " · +" + esc(wa.phone) : ""}` : esc(s.whatsapp.provider)}</div></div>
+        <div><div class="k">Prompts go to</div><div class="v">${esc(s.whatsapp.notify_numbers.join(", ") || "not set")}</div></div>
+        <div><div class="k">Google Sheet</div><div class="v">${s.sheets.url ? `<a href="${esc(s.sheets.url)}" target="_blank" rel="noopener">Open sheet ↗</a>` : "not configured"}</div></div>
+      </div></div>
+      <div class="panel"><h2>Latest extracted PDFs <a class="right" href="#invoices">View all →</a></h2>
+        ${invoiceTable(o.recent_invoices)}
+      </div>`;
+  },
+
+  async emails() {
+    const emails = await api("/emails");
+    const rows = emails.map((e) => {
+      const s = senderName(e.sender);
+      return `<tr class="click" data-href="${e.invoices[0] ? "#invoice/" + e.invoices[0].id : ""}">
+        <td class="nowrap">${esc(fmtTime(e.received_at))}</td>
+        <td><div>${esc(s.name)}</div><div class="muted mono">${esc(s.addr)}</div></td>
+        <td>${esc(e.subject)}</td>
+        <td>${verdictBadge(e.classification)}${e.bank_name ? ` <b>${esc(e.bank_name)}</b>` : ""}${e.classification_reason ? `<div class="muted" style="font-size:12px">${esc(e.classification_reason)}</div>` : ""}</td>
+        <td>${e.invoices.map((i) => `<div><a href="#invoice/${i.id}">${esc(i.pdf_filename.replace(/^[^_]+_/, ""))}</a></div><div>${statusBadge(i.status)} <span class="badge">${esc(i.bank_code)}</span></div>`).join("") || `<span class="muted">—</span>`}</td>
+      </tr>`;
+    }).join("");
+    return pageHeader("Emails", "Every inbox email with a PDF / Excel attachment. The LLM decides whether it's bank-related; only those go on to WhatsApp.", syncButton) + `
+      <div class="panel">${emails.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>Received</th><th>From</th><th>Subject</th><th>LLM verdict</th><th>File / status</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>` : `<div class="empty-state">No emails fetched yet. New inbox emails with a PDF attachment will show up here.</div>`}
+      </div>`;
+  },
+
+  async invoices() {
+    const list = await api("/invoices");
+    return pageHeader("Extracted data", "What was read from each PDF attachment", syncButton) +
+      `<div class="panel">${list.length ? invoiceTable(list) : `<div class="empty-state">Nothing extracted yet.</div>`}</div>`;
+  },
+
+  async invoice(id) {
+    // PDF text never changes; only re-fetch the record/messages on refresh.
+    contentCache[id] ??= api(`/invoices/${id}/content`).catch((e) => { delete contentCache[id]; throw e; });
+    const [inv, content] = await Promise.all([api(`/invoices/${id}`), contentCache[id]]);
+    const field = (k, v) => `<div><div class="k">${esc(k)}</div><div class="v ${v ? "" : "empty"}">${v ? esc(v) : "not found"}</div></div>`;
+    const st = content.statement;
+    const txns = inv.transactions;
+    const canResend = (!st || txns.length) && ["SEND_FAILED", "PENDING_CONFIRMATION"].includes(inv.status);
+
+    let summaryHtml, rowsHtml = "";
+    if (st) {
+      const t = st.totals;
+      const c = inv.transaction_counts || {};
+      summaryHtml = `<div class="panel"><h2>Statement summary <span class="right">read exactly from the PDF · no LLM</span></h2><div class="panel-body">
+        ${t.unreconciled ? `<div class="alert warn">${t.unreconciled} row(s) don't match the running balance. Check those against the PDF.</div>` : `<div class="alert info">All ${t.count} rows match the running balance.</div>`}
+        ${!txns.length ? `<div class="alert info">Account statements aren't tracked — only invoices / bank documents are. Shown here for reference; nothing was sent or saved.</div>` : ""}
+        ${inv.extra?.duplicates_skipped ? `<div class="alert info">${inv.extra.duplicates_skipped} row(s) were already in an earlier statement, so they weren't sent again.</div>` : ""}
+        <div class="kv">
+          ${field("Period", inv.txn_date || `${st.rows[0].date} – ${st.rows[st.rows.length - 1].date}`)}
+          <div><div class="k">Opening balance</div><div class="v">${money(st.opening)}</div></div>
+          <div><div class="k">Credits (${st.rows.filter((r) => r.credit != null).length})</div><div class="v credit">${money(t.credit)}</div></div>
+          <div><div class="k">Debits (${st.rows.filter((r) => r.debit != null).length})</div><div class="v debit">${money(t.debit)}</div></div>
+          <div><div class="k">Closing balance</div><div class="v">${money(st.closing)}</div></div>
+          ${txns.length ? `<div><div class="k">WhatsApp progress</div><div class="v">${c.CONFIRMED || 0} saved · ${c.REJECTED || 0} skipped · ${c.PENDING_CONFIRMATION || 0} awaiting reply${c.SEND_FAILED ? ` · <span class="debit">${c.SEND_FAILED} failed</span>` : ""}</div></div>` : ""}
+        </div></div></div>`;
+      rowsHtml = txns.length ? `<div class="panel"><h2>Transactions <span class="right">${txns.length} rows · confirmed together with one WhatsApp reply</span></h2>${txnTable(txns, { showPdf: false })}</div>`
+        : `<div class="panel"><h2>Transactions (preview) <span class="right">${st.rows.length} rows</span></h2>
+          <div class="table-wrap scroll"><table>
+          <thead><tr><th>Date</th><th>Party</th><th>Details</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th></tr></thead>
+          <tbody>${st.rows.map((r) => `<tr${r.reconciled ? "" : ' style="background:var(--warn-bg)"'}>
+            <td class="nowrap">${esc(r.date)}</td><td><b>${esc(r.party || "")}</b></td><td class="muted">${esc(r.details)}</td>
+            <td class="num debit">${money(r.debit)}</td><td class="num credit">${money(r.credit)}</td><td class="num">${money(r.balance)}</td></tr>`).join("")}
+          </tbody></table></div></div>`;
+    } else {
+      summaryHtml = `<div class="panel"><h2>Extracted fields <span class="right">${esc(inv.extra?.extraction_method || "")} ${inv.extra?.llm_model ? "· " + esc(inv.extra.llm_model) : ""}</span></h2><div class="panel-body">
+        ${content.kind === "pdf_scanned" ? `<div class="alert info">Scanned PDF (no text layer): the LLM read the page images directly.</div>` : ""}
+        ${inv.extra?.classification_reason ? `<div class="alert ${inv.status === "NOT_BANK" ? "warn" : "info"}">${inv.status === "NOT_BANK" ? "Rejected" : "Selected"}: ${esc(inv.extra.classification_reason)}</div>` : ""}
+        <div class="kv">${field("Issued by (letterhead)", inv.extra?.issuer_name)}${field("Reference", inv.reference_number)}${field("Date", inv.txn_date)}${field("Amount", inv.amount ? `${inv.extra?.currency || ""} ${inv.amount}`.trim() : null)}
+        ${field("From (payer)", inv.sender_name)}${field("From account", inv.extra?.sender_account)}${field("To (payee)", inv.receiver_name)}${field("To account", inv.extra?.receiver_account)}
+        ${field("Purpose", inv.extra?.purpose)}${field("Document type", inv.extra?.document_type)}${field("Bank (as read)", inv.extra?.bank_name)}
+        ${inv.extra?.amount_sanity_check && inv.extra.amount_sanity_check !== "no_regex_match" ? field("Amount check", inv.extra.amount_sanity_check) : ""}</div>
+        ${inv.extra?.items_table?.rows?.length ? `<h3 style="margin:18px 0 8px;font-size:13px">Items in the document (${inv.extra.items_table.rows.length})</h3>
+          <div class="table-wrap"><table><thead><tr>${(inv.extra.items_table.columns || []).map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+          <tbody>${inv.extra.items_table.rows.map((r) => `<tr>${r.map((v) => `<td>${esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : ""}
+      </div></div>`;
+    }
+
+    return pageHeader(`${inv.bank_name} · #${inv.id}`, `${statusBadge(inv.status)} <span class="muted">${esc(inv.pdf_filename.replace(/^[^_]+_/, ""))}</span>`,
+      `<a class="btn" href="#invoices">← Back</a>
+       <a class="btn" href="/api/invoices/${inv.id}/pdf" target="_blank" rel="noopener">${content.kind === "email" ? "Open email" : "Open file"} ↗</a>
+       <button class="danger" data-action="delete" data-id="${inv.id}" data-name="${esc(inv.pdf_filename.replace(/^[^_]+_/, ""))}">🗑 Delete</button>
+       ${inv.status === "FAILED_PARSE" ? `<button class="primary" data-action="reparse" data-id="${inv.id}">↻ Re-parse PDF</button>` : ""}
+       ${canResend ? `<button class="primary" data-action="resend" data-id="${inv.id}">Resend on WhatsApp</button>` : ""}`) + `
+      ${inv.parse_error && !st ? `<div class="alert bad"><b>Parse error:</b> ${esc(inv.parse_error)}</div>` : ""}
+      ${content.error ? `<div class="alert bad"><b>Couldn't read PDF:</b> ${esc(content.error)}</div>` : ""}
+      <div class="panel"><h2>Source email</h2><div class="panel-body kv">
+        ${field("From", inv.email_sender)}${field("Subject", inv.email_subject)}${field("Fetched", fmtTime(inv.created_at))}${field("Bank", `${inv.bank_name} (${inv.bank_code})`)}
+      </div></div>
+      ${summaryHtml}
+      ${rowsHtml}
+      ${content.kind === "email" ? `<div class="panel"><h2>Email <span class="right"><a href="/api/invoices/${inv.id}/pdf" target="_blank" rel="noopener">Open full page ↗</a></span></h2>
+        <iframe src="/api/invoices/${inv.id}/pdf" title="Email" style="width:100%;height:600px;border:0;display:block"
+          onload="try { this.style.height = this.contentDocument.documentElement.scrollHeight + 'px'; } catch {}"></iframe></div>` : ""}
+      <div class="panel"><h2>WhatsApp conversation <span class="right">${inv.messages.length} messages</span></h2>${chat(inv.messages)}</div>
+      <div class="panel"><details><summary>Raw text read from the ${content.kind === "email" ? "email" : "PDF"} ${content.text ? `<span class="muted">(${content.text.length.toLocaleString()} characters)</span>` : ""}</summary>
+        <div class="panel-body">${content.text ? `<pre class="text">${esc(content.text)}</pre>` : `<span class="muted">${content.kind === "pdf_scanned" ? "Scanned PDF: no text layer. Open the file to see it." : "No text available."}</span>`}</div></details></div>`;
+  },
+
+  async transactions(filter) {
+    const list = await api("/transactions" + (filter ? `?status=${encodeURIComponent(filter)}` : ""));
+    const all = filter ? await api("/transactions") : list;
+    const count = (s) => all.filter((t) => t.status === s).length;
+    const chips = [["", "All", all.length], ["PENDING_CONFIRMATION", "Awaiting reply", count("PENDING_CONFIRMATION")],
+      ["CONFIRMED", "Saved", count("CONFIRMED")], ["REJECTED", "Skipped", count("REJECTED")], ["SEND_FAILED", "Send failed", count("SEND_FAILED")]];
+    return pageHeader("Transactions", "Every statement row. Each statement is sent as one WhatsApp message; 👍 saves all its rows to the sheet, 👎 skips them.", syncButton) + `
+      <div class="chips">${chips.map(([v, l, n]) => `<a class="chip ${(filter || "") === v ? "active" : ""}" href="#transactions${v ? "/" + v : ""}">${esc(l)} <span>${n}</span></a>`).join("")}</div>
+      <div class="panel">${list.length ? txnTable(list, { showPdf: true }) : `<div class="empty-state">No transactions${filter ? " with this status" : " yet. They appear when a bank statement PDF arrives"}.</div>`}</div>`;
+  },
+
+  async whatsapp() {
+    const [msgs, s] = await Promise.all([api("/whatsapp/messages"), api("/status")]);
+    const wa = s.whatsapp.openwa;
+    const ready = wa && wa.status === "ready";
+    const rows = msgs.map((m) => `<tr>
+        <td class="nowrap">${esc(fmtTime(m.created_at))}</td>
+        <td class="nowrap">${m.direction === "out" ? "→ Sent" : "← Received"}</td>
+        <td class="mono nowrap">${esc(m.peer_number || "—")}</td>
+        <td><div style="white-space:pre-wrap">${esc(m.text)}</div>${m.error ? `<div class="debit" style="font-size:12px">${esc(m.error)}</div>` : ""}</td>
+        <td class="nowrap">${m.transaction_id ? `<a href="#invoice/${m.invoice_id}">T${m.transaction_id}</a>` : m.invoice_id ? `<a href="#invoice/${m.invoice_id}">#${m.invoice_id}</a>` : "—"}</td>
+        <td>${msgBadge(m.status)}</td></tr>`).join("");
+    return pageHeader("WhatsApp", "Every message the bot sent or received, with delivery status") + `
+      <div class="panel"><h2>Connection</h2><div class="panel-body kv">
+        <div><div class="k">Provider</div><div class="v">${esc(s.whatsapp.provider === "openwa" ? "OpenWA (self-hosted)" : "Meta Cloud API")}</div></div>
+        ${wa ? `<div><div class="k">Session</div><div class="v"><span class="badge ${ready ? "ok" : "bad"}">${esc(wa.status)}</span></div></div>
+        <div><div class="k">Bot number</div><div class="v">${wa.phone ? "+" + esc(wa.phone) : "—"} ${wa.pushName ? `<span class="muted">(${esc(wa.pushName)})</span>` : ""}</div></div>` : ""}
+        <div><div class="k">Prompts go to</div><div class="v">${esc(s.whatsapp.notify_numbers.join(", ") || "not set")}</div>
+          <div class="muted" style="font-size:12px">set in ${esc(s.whatsapp.notify_numbers_source)}</div></div>
+      </div>
+      <form id="notify-form" class="panel-body" style="padding-top:0;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input name="numbers" value="${esc(s.whatsapp.notify_numbers.join(", "))}" placeholder="923001234567" required
+          style="flex:1;min-width:200px;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font:inherit;background:var(--bg);color:var(--fg)">
+        <button type="submit">Save number</button>
+        <div class="muted" style="font-size:12px;flex-basis:100%">Full number with country code (e.g. 923001234567). New prompts go to this number, and Yes/No replies are accepted from it. Prompts already sent stay with the number they went to.</div>
+      </form>${wa && !ready ? `<div class="panel-body" style="padding-top:0"><div class="alert bad">OpenWA isn't connected${wa.error ? `: ${esc(wa.error)}` : ""}. Make sure Docker is running and the session is linked at <a href="http://localhost:2785" target="_blank" rel="noopener">localhost:2785</a>.</div></div>` : ""}</div>
+      <div class="panel"><h2>Message log <span class="right">${msgs.length} messages</span></h2>
+        ${msgs.length ? `<div class="table-wrap"><table><thead><tr><th>Time</th><th>Direction</th><th>Number</th><th>Message</th><th>For</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`
+          : `<div class="empty-state">No messages yet. When a PDF is extracted, the confirmation prompt will show up here.</div>`}
+      </div>`;
+  },
+
+  async settings() {
+    const s = await api("/status");
+    const banks = s.banks.map((b) => `<tr>
+      <td><b>${esc(b.name)}</b><div class="muted">${esc(b.code)}</div></td>
+      <td class="mono">${b.sender_match.map(esc).join("<br>")}</td>
+      <td>${esc(b.parser === "LLM" ? "LLM (" + s.llm.model + ")" : b.parser)}</td>
+      <td>${b.password_env ? `<span class="badge ${b.password_set ? "ok" : "bad"}">${b.password_set ? "set" : "missing"}</span> <span class="mono muted">${esc(b.password_env)}</span>` : `<span class="muted">none</span>`}</td></tr>`).join("");
+    const g = s.gmail;
+    return pageHeader("Settings", "Read-only view of the current configuration. Edit <span class=\"mono\">.env</span> and <span class=\"mono\">app/bank_registry.py</span> to change it.") + `
+      <div class="panel"><h2>Banks</h2>${s.banks.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>Bank</th><th>Matches sender</th><th>Parser</th><th>PDF password</th></tr></thead><tbody>${banks}</tbody></table></div>`
+        : `<div class="empty-state">No banks configured. Every email will be stored as "Unknown bank".</div>`}</div>
+      <div class="panel"><h2>Gmail</h2><div class="panel-body kv">
+        <div><div class="k">Watching labels</div><div class="v">${esc(g.labels)}</div></div>
+        <div><div class="k">Last sync</div><div class="v">${esc(fmtTime(g.last_sync_at))}</div></div>
+        <div><div class="k">Pub/Sub listener</div><div class="v"><span class="badge ${g.pubsub.state === "listening" ? "ok" : g.pubsub.state === "disabled" ? "" : "bad"}">${esc(g.pubsub.state)}</span> <span class="mono muted">${esc(g.pubsub.subscription || "")}</span></div>${g.pubsub.detail ? `<div class="muted" style="font-size:12px">${esc(g.pubsub.detail)}</div>` : ""}</div>
+        <div><div class="k">Polling</div><div class="v">${g.pubsub.state === "listening" ? "off (Pub/Sub is active)" : `fallback every ${esc(g.reconcile_interval_seconds)} s`}</div></div>
+        <div><div class="k">Push watch expires</div><div class="v">${esc(fmtTime(g.watch_expires_at))}</div></div>
+        <div><div class="k">History cursor</div><div class="v mono">${esc(g.last_history_id || "—")}</div></div>
+      </div></div>
+      <div class="panel"><h2>Extraction &amp; output</h2><div class="panel-body kv">
+        <div><div class="k">LLM model</div><div class="v">${esc(s.llm.model)} ${s.llm.configured ? "" : `<span class="badge bad">no API key</span>`}</div></div>
+        <div><div class="k">WhatsApp provider</div><div class="v">${esc(s.whatsapp.provider)}</div></div>
+        <div><div class="k">Google Sheet</div><div class="v">${s.sheets.url ? `<a href="${esc(s.sheets.url)}" target="_blank" rel="noopener">Open sheet ↗</a>` : "not configured"}</div></div>
+      </div></div>`;
+  },
+};
+
+function txnTable(list, { showPdf }) {
+  return `<div class="table-wrap scroll"><table>
+    <thead><tr><th>Txn</th><th>Date</th><th>Party / details</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th><th>Status</th>${showPdf ? "<th>Statement</th>" : ""}</tr></thead>
+    <tbody>${list.map((t) => `<tr${t.reconciled ? "" : ' style="background:var(--warn-bg)"'}>
+      <td class="mono nowrap">${esc(t.label)}<div class="muted">row ${t.row_no}</div></td>
+      <td class="nowrap">${esc(t.txn_date)}</td>
+      <td>${t.party ? `<b>${esc(t.party)}</b>${t.reference ? ` <span class="muted mono">· ${esc(t.reference)}</span>` : ""}<br>` : ""}<span class="muted">${esc(t.details)}</span></td>
+      <td class="num debit">${money(t.debit)}</td><td class="num credit">${money(t.credit)}</td><td class="num">${money(t.balance)}</td>
+      <td>${statusBadge(t.status)}</td>
+      ${showPdf ? `<td><a href="#invoice/${t.invoice_id}">#${t.invoice_id}</a></td>` : ""}
+    </tr>`).join("")}</tbody></table></div>`;
+}
+
+function invoiceTable(list) {
+  return `<div class="table-wrap"><table>
+    <thead><tr><th>#</th><th>Fetched</th><th>Bank</th><th>PDF</th><th>Date</th><th class="num">Amount</th><th>Reference</th><th>Status</th><th></th></tr></thead>
+    <tbody>${list.map((i) => `<tr class="click" data-href="#invoice/${i.id}">
+      <td>${i.id}</td><td class="nowrap">${esc(fmtTime(i.created_at))}</td>
+      <td>${esc(i.bank_name)}</td>
+      <td class="ellipsis" title="${esc(i.pdf_filename)}">${esc(i.pdf_filename.replace(/^[^_]+_/, ""))}</td>
+      <td class="nowrap">${esc(i.txn_date || "—")}</td><td class="num">${i.transaction_counts ? `${i.transaction_counts.total} txns` : esc(i.amount || "—")}</td>
+      <td class="mono">${esc(i.reference_number || "—")}</td><td>${statusBadge(i.status)}</td>
+      <td><button class="icon danger" data-action="delete" data-id="${i.id}" data-name="${esc(i.pdf_filename.replace(/^[^_]+_/, ""))}" title="Delete this file">🗑</button></td></tr>`).join("")}
+    </tbody></table></div>`;
+}
+
+// Incoming emails: show 5 rows, scroll for the rest. Rows differ in height
+// (wrapped steps, reasons), so the box is sized from the real rows.
+const ACTIVITY_VISIBLE_ROWS = 5;
+function fitActivityRows() {
+  const box = $(".activity-scroll");
+  if (!box) return;
+  const rows = box.querySelectorAll("tbody tr");
+  if (rows.length <= ACTIVITY_VISIBLE_ROWS) { box.style.maxHeight = ""; return; }
+  const head = box.querySelector("thead")?.offsetHeight || 0;
+  let h = head;
+  for (let i = 0; i < ACTIVITY_VISIBLE_ROWS; i++) h += rows[i].offsetHeight;
+  box.style.maxHeight = `${h + 2}px`;
+}
+window.addEventListener("resize", fitActivityRows);
+
+/* ---------- Router, sidebar status, actions ---------- */
+
+let currentRoute = "";
+async function render({ quiet = false } = {}) {
+  const hash = location.hash.slice(1) || "overview";
+  const [tab, id] = hash.split("/");
+  const view = tab === "invoice" ? "invoice" : (views[tab] ? tab : "overview");
+  const navTab = view === "invoice" ? "invoices" : view;
+  document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.tab === navTab));
+  const route = hash;
+  if (!quiet && route !== currentRoute) main.innerHTML = `<div class="empty-state">Loading…</div>`;
+  try {
+    const html = await views[view](id);
+    // The user may have clicked elsewhere while this loaded; don't overwrite that page.
+    if ((location.hash.slice(1) || "overview") === route) {
+      const scrollY = window.scrollY;
+      const inner = $(".activity-scroll")?.scrollTop || 0;
+      main.innerHTML = html;
+      fitActivityRows();
+      if (quiet) {
+        window.scrollTo(0, scrollY);
+        const box = $(".activity-scroll");
+        if (box) box.scrollTop = inner;  // keep the list where the user scrolled it
+      }
+    }
+    currentRoute = route;
+  } catch (e) {
+    if (!quiet) main.innerHTML = `<div class="alert bad">Couldn't load this page: ${esc(e.message)}</div>`;
+  }
+}
+
+async function refreshSidebar() {
+  try {
+    const [o, s] = await Promise.all([api("/overview"), api("/status")]);
+    const setCount = (el, n) => { el.hidden = !n; el.textContent = n; };
+    setCount($("#count-emails"), o.emails);
+    $("#dot-gmail").className = "dot " + (s.gmail.initialized ? "ok" : "warn");
+    $("#foot-gmail").textContent = s.gmail.initialized ? "· " + ago(s.gmail.last_sync_at) : "· not started";
+    const wa = s.whatsapp.openwa;
+    const waOk = wa ? wa.status === "ready" : s.whatsapp.provider === "meta";
+    $("#dot-wa").className = "dot " + (waOk ? "ok" : "bad");
+    $("#foot-wa").textContent = wa ? "· " + wa.status : "· " + s.whatsapp.provider;
+  } catch { /* sidebar status is best-effort */ }
+}
+
+document.addEventListener("click", async (ev) => {
+  const row = ev.target.closest("tr[data-href]");
+  if (row && row.dataset.href && !ev.target.closest("a, button")) { location.hash = row.dataset.href; return; }
+  const btn = ev.target.closest("button[data-action]");
+  if (!btn) return;
+  if (btn.dataset.action === "delete" && !confirm(
+    `Delete "${btn.dataset.name}"?
+
+Its extracted data and statement rows are removed from the dashboard and the file is deleted from disk. Rows already saved to the Google Sheet stay there.`)) return;
+  btn.disabled = true;
+  try {
+    if (btn.dataset.action === "sync") {
+      const r = await api("/sync", { method: "POST" });
+      toast(r.new_invoices_queued ? `${r.new_invoices_queued} new PDF(s) picked up` : "No new emails");
+    } else if (btn.dataset.action === "reparse") {
+      toast("Re-parsing… this can take a few seconds");
+      const r = await api(`/invoices/${btn.dataset.id}/reparse`, { method: "POST" });
+      toast(r.status === "FAILED_PARSE" ? "Still failing. See the error above."
+        : r.transaction_counts ? (r.status === "SEND_FAILED" ? "WhatsApp send failed. See the conversation below." : r.status === "STATEMENT" ? "Account statement: not tracked, nothing sent." : `Sent ${r.transaction_counts.total} transactions on WhatsApp as one message`)
+        : "Parsed" + (r.status === "PENDING_CONFIRMATION" ? " and sent on WhatsApp" : ""));
+    } else if (btn.dataset.action === "retry") {
+      toast("Retrying… watch the progress in the row");
+      const r = await api(`/emails/${btn.dataset.id}/retry`, { method: "POST" });
+      toast(r.prompts_sent ? "Processed and sent on WhatsApp" : "Processed");
+    } else if (btn.dataset.action === "delete") {
+      await api(`/invoices/${btn.dataset.id}`, { method: "DELETE" });
+      delete contentCache[btn.dataset.id];
+      toast("Deleted");
+      if (location.hash.startsWith("#invoice/")) { location.hash = "#invoices"; return; }
+    } else if (btn.dataset.action === "resend") {
+      const r = await api(`/invoices/${btn.dataset.id}/resend`, { method: "POST" });
+      toast(r.status === "SEND_FAILED" ? "Send failed. See the conversation below." : "Sent on WhatsApp");
+    }
+    await Promise.all([render({ quiet: true }), refreshSidebar()]);
+  } catch (e) {
+    toast("Error: " + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.addEventListener("submit", async (ev) => {
+  if (ev.target.id !== "notify-form") return;
+  ev.preventDefault();
+  const form = ev.target, btn = form.querySelector("button");
+  btn.disabled = true;
+  try {
+    const r = await api("/whatsapp/notify-numbers", { method: "PUT", body: { numbers: form.numbers.value } });
+    toast("Prompts will now go to " + r.notify_numbers.join(", "));
+    form.numbers.blur();
+    await Promise.all([render({ quiet: true }), refreshSidebar()]);
+  } catch (e) {
+    toast("Error: " + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+window.addEventListener("hashchange", () => render());
+render();
+refreshSidebar();
+// Live-ish: pick up new emails, replies and delivery ticks without a manual reload.
+// On the Overview, check a cheap fingerprint every 2 s and re-render as soon
+// as it changes (new email, next processing step, WhatsApp tick). Other pages
+// refresh every 16 s.
+let tick = 0, lastVersion = null;
+setInterval(async () => {
+  // Don't re-render under the user: an open <details> or a field being typed in.
+  if (document.hidden || document.querySelector("details[open]") || document.activeElement?.matches("input, textarea")) return;
+  tick += 1;
+  const onOverview = (location.hash.slice(1) || "overview").startsWith("overview");
+  if (onOverview) {
+    try {
+      const { v } = await api("/activity/version");
+      if (v !== lastVersion || processingActive) {
+        const first = lastVersion === null;
+        lastVersion = v;
+        if (!first) { render({ quiet: true }); refreshSidebar(); }
+      }
+    } catch { /* next tick */ }
+  } else if (tick % 8 === 0) { render({ quiet: true }); refreshSidebar(); }
+}, 2000);
+</script>
+</body>
+</html>

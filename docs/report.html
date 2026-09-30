@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Email Processing Report</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --text: #1f2328;
+    --muted: #5b6168;
+    --line: #d9dce0;
+    --soft: #f5f6f7;
+    --ok: #1a7f37;
+    --ok-soft: #e8f5ec;
+    --skip: #8a5a00;
+    --skip-soft: #fbf3e2;
+    --accent: #2f5aa8;
+    --accent-soft: #eaf0fa;
+  }
+  @page { size: A4; margin: 12mm; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.45 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
+  h1 { font-size: 22px; margin: 0 0 2px; }
+  .meta { color: var(--muted); margin-bottom: 10px; }
+  h2 { font-size: 15px; margin: 14px 0 5px; padding-bottom: 3px; border-bottom: 1px solid var(--line); }
+  p { margin: 0 0 8px; }
+  .lead { font-size: 14px; }
+  .stats { display: flex; gap: 8px; margin: 10px 0 4px; }
+  .stat { flex: 1; padding: 8px 10px; border-radius: 6px; background: var(--soft); }
+  .stat b { display: block; font-size: 20px; line-height: 1.1; }
+  .stat.ok { background: var(--ok-soft); } .stat.ok b { color: var(--ok); }
+  .stat.skip { background: var(--skip-soft); } .stat.skip b { color: var(--skip); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; vertical-align: top; padding: 5px 6px; border-bottom: 1px solid var(--line); }
+  th { background: var(--soft); font-weight: 600; }
+  .pill { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); }
+  .pill.skip { background: var(--skip-soft); color: var(--skip); }
+  .flow { width: 100%; height: auto; display: block; margin: 4px 0 8px; }
+  ol { margin: 0 0 6px; padding-left: 20px; } li { margin-bottom: 2px; }
+  .note { font-size: 12px; color: var(--muted); padding: 6px 10px; border-left: 3px solid var(--skip); background: var(--skip-soft); margin-top: 8px; }
+  .table-wrap { overflow-x: auto; }
+  @media print {
+    main { max-width: none; padding: 0; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Email Processing Report</h1>
+  <div class="meta">24 September 2026 · Nouman Subhani</div>
+
+  <p class="lead">The bot processed 5 forwarded emails between 18:09 and 18:11. It selected 3 bank documents and saved them to the Google Sheet after WhatsApp approval. It skipped 2, and both skips follow the rules.</p>
+  <div class="stats">
+    <div class="stat"><b>5</b>emails processed</div>
+    <div class="stat ok"><b>3</b>selected &amp; saved</div>
+    <div class="stat skip"><b>2</b>skipped</div>
+  </div>
+
+  <h2>How LangGraph handled them</h2>
+  <p>Each email runs through a three-step LangGraph flow. Only emails with a bank document reach the WhatsApp step.</p>
+  <svg class="flow" viewBox="0 0 720 150" role="img" aria-label="Flow: Read documents, Analyze documents, then Notify on WhatsApp and Saved to Google Sheet on YES; not a bank document or a statement goes to Skipped">
+    <defs>
+      <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#5b6168"/>
+      </marker>
+    </defs>
+    <g font-family="-apple-system, Segoe UI, Roboto, Arial, sans-serif" text-anchor="middle">
+      <!-- boxes -->
+      <rect x="2" y="12" width="138" height="52" rx="7" fill="#eaf0fa" stroke="#2f5aa8"/>
+      <text x="71" y="34" font-size="13" font-weight="600" fill="#1f2328">1. Read documents</text>
+      <text x="71" y="52" font-size="11" fill="#5b6168">open PDF or email body</text>
+
+      <rect x="186" y="12" width="150" height="52" rx="7" fill="#eaf0fa" stroke="#2f5aa8"/>
+      <text x="261" y="34" font-size="13" font-weight="600" fill="#1f2328">2. Analyze documents</text>
+      <text x="261" y="52" font-size="11" fill="#5b6168">LLM: bank? which bank?</text>
+
+      <rect x="400" y="12" width="138" height="52" rx="7" fill="#eaf0fa" stroke="#2f5aa8"/>
+      <text x="469" y="34" font-size="13" font-weight="600" fill="#1f2328">3. Notify</text>
+      <text x="469" y="52" font-size="11" fill="#5b6168">WhatsApp YES / NO</text>
+
+      <rect x="580" y="12" width="138" height="52" rx="7" fill="#e8f5ec" stroke="#1a7f37"/>
+      <text x="649" y="34" font-size="13" font-weight="600" fill="#1a7f37">Saved to sheet</text>
+      <text x="649" y="52" font-size="11" fill="#5b6168">3 emails</text>
+
+      <rect x="186" y="96" width="150" height="48" rx="7" fill="#fbf3e2" stroke="#8a5a00" stroke-dasharray="4 3"/>
+      <text x="261" y="116" font-size="13" font-weight="600" fill="#8a5a00">Skipped</text>
+      <text x="261" y="133" font-size="11" fill="#5b6168">2 emails · nothing sent</text>
+
+      <!-- arrows -->
+      <line x1="140" y1="38" x2="184" y2="38" stroke="#5b6168" stroke-width="1.5" marker-end="url(#arr)"/>
+      <line x1="336" y1="38" x2="398" y2="38" stroke="#5b6168" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="367" y="30" font-size="10" fill="#1a7f37">bank doc</text>
+      <line x1="538" y1="38" x2="578" y2="38" stroke="#5b6168" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="558" y="30" font-size="10" fill="#1a7f37">YES</text>
+      <line x1="261" y1="64" x2="261" y2="94" stroke="#5b6168" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="268" y="83" font-size="10" fill="#8a5a00" text-anchor="start">not a bank doc, or a statement</text>
+    </g>
+  </svg>
+  <ol>
+    <li><b>Read documents</b> opens each attachment. When an email has no attachment, the bot reads its body instead.</li>
+    <li><b>Analyze documents</b> makes one LLM call per document. It judges from the letterhead whether a bank wrote it, names the bank and pulls out the reference, date, amount and items.</li>
+    <li><b>Notify</b> sends one WhatsApp YES / NO message per selected document. A YES saves the row to that bank's tab in the sheet.</li>
+  </ol>
+
+  <h2>Selected (3)</h2>
+  <p>All three were written by a bank, and the approver replied YES on WhatsApp before each one was saved.</p>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Email</th><th>Bank</th><th>What it is</th><th>Read from</th><th>Result</th></tr>
+    <tr><td>LC Docs A/C Mumtaz Agro Industries</td><td>Meezan Bank</td><td>Letter of Credit endorsement, Ref CAD/MUL/26/INSU0501-00462, USD 894,438</td><td>PDF attachment</td><td><span class="pill ok">Saved</span></td></tr>
+    <tr><td>M M Commodities GRN 23 Sep</td><td>Meezan Bank</td><td>Delivery order for pledged stock</td><td>Email body</td><td><span class="pill ok">Saved</span></td></tr>
+    <tr><td>Collection of Documents A/c Jilani Group</td><td>Habib Metropolitan Bank</td><td>Document collection notice</td><td>Email body</td><td><span class="pill ok">Saved</span></td></tr>
+  </table>
+  </div>
+
+  <h2>Skipped (2)</h2>
+  <p>Nothing was sent on WhatsApp or saved to the sheet for either of these.</p>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Email</th><th>What it is</th><th>Why it was skipped</th></tr>
+    <tr><td>E-Statement BAHL (SI:100639555)</td><td>Bank Al Habib account statement, 1 Aug 2026</td><td><span class="pill skip">Statement</span> It is a bank document, but an account statement. The bot tracks only invoices and bank documents such as L/Cs, delivery orders and notices, not every account transaction.</td></tr>
+    <tr><td>Pledge Stock Takeover, Mian Cotton Ginning</td><td>Request letter for a pledge stock takeover</td><td><span class="pill skip">Not a bank</span> The PDF is on Mian Cotton's own letterhead, so a customer wrote it, not a bank. The bot decides from the attachment alone, even when a bank forwarded it.</td></tr>
+  </table>
+  </div>
+
+  <div class="note">The dashboard labels the statement "Not a bank document" and lists it under Rejected. The skip is correct; only the label is wrong, and a small fix will change it to "Statement · not tracked".</div>
+</main>
+</body>
+</html>
