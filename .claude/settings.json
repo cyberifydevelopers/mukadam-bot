@@ -21,7 +21,8 @@
       "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); d=d.get\\('data',d\\) if isinstance\\(d,dict\\) else d; [print\\(s.get\\('id'\\),s.get\\('name'\\),s.get\\('status'\\),s.get\\('phone'\\),'connectedAt',s.get\\('connectedAt'\\),'err',s.get\\('lastError'\\)\\) for s in d]\")",
       "PowerShell(git add app/services/openwa_service.py)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(git fetch *)"
     ]
   }
 }
