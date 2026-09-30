@@ -96,10 +96,20 @@ def verify_webhook_signature(raw_body: bytes, signature_header: str | None) -> b
         logger.warning("OPENWA_WEBHOOK_SECRET not set — refusing to accept unverifiable webhook calls")
         return False
     if not signature_header or not signature_header.startswith("sha256="):
+        logger.warning(
+            "OpenWA webhook call has no X-OpenWA-Signature header — the webhook was "
+            "registered in OpenWA without a secret"
+        )
         return False
 
     expected = hmac.new(settings.openwa_webhook_secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, signature_header.split("=", 1)[1])
+    if not hmac.compare_digest(expected, signature_header.split("=", 1)[1]):
+        logger.warning(
+            "OpenWA webhook signature mismatch — the secret set on the webhook in OpenWA "
+            "differs from OPENWA_WEBHOOK_SECRET"
+        )
+        return False
+    return True
 
 
 @dataclass
