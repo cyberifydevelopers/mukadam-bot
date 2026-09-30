@@ -7,7 +7,8 @@
       "PowerShell(python -c \"from google.oauth2.credentials import Credentials; from google.auth.transport.requests import Request; c=Credentials.from_authorized_user_file\\('credentials/token.json'\\); print\\('scopes:', c.scopes\\); print\\('expired:', c.expired, 'has_refresh:', bool\\(c.refresh_token\\)\\); c.refresh\\(Request\\(\\)\\); print\\('refresh OK'\\)\")",
       "PowerShell(python -m py_compile app/config.py app/services/google_auth.py)",
       "PowerShell(git ls-files credentials; git log --oneline -3; python -m py_compile app/services/google_auth.py; if \\($?\\) { \"compile ok\" }; \\(Get-Item credentials\\\\token.json\\).Length)",
-      "PowerShell(python -m py_compile app/services/openwa_service.py)"
+      "PowerShell(python -m py_compile app/services/openwa_service.py)",
+      "PowerShell(python -m py_compile app/worker/scheduler.py)"
     ]
   }
 }

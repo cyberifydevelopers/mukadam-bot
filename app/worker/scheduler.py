@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -63,11 +64,15 @@ def start_scheduler(pubsub_active: bool) -> None:
             id="gmail_reconcile",
         )
     # Keeps Gmail publishing to the topic at all — needed with or without polling.
+    # First run right at startup, not one interval later: on a fresh database
+    # (e.g. a redeploy on a host with an ephemeral disk) there's no watch or
+    # sync baseline until this runs.
     _scheduler.add_job(
         _renew_watch_job,
         "interval",
         seconds=settings.gmail_watch_renew_interval_seconds,
         id="gmail_watch_renew",
+        next_run_time=datetime.now(),
     )
     _scheduler.start()
     if poll:
