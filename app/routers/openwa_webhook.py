@@ -3,7 +3,7 @@ import logging
 import re
 import threading
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
@@ -125,12 +125,12 @@ _HANDLE_LOCK = threading.Lock()
 
 
 @router.post("")
-async def receive_webhook(request: Request):
+async def receive_webhook(request: Request, token: str = Query(default="")):
     """OpenWA webhook (registered for `message.received`, `message.reaction`
-    and `message.ack`). OpenWA runs on the same machine, so this needs no
-    public URL / tunnel."""
+    and `message.ack`). Authenticated by OpenWA's signature header, or by a
+    `?token=` in the URL for a webhook created without a secret."""
     raw_body = await request.body()
-    if not openwa_service.verify_webhook_signature(raw_body, request.headers.get("X-OpenWA-Signature")):
+    if not openwa_service.verify_webhook_signature(raw_body, request.headers.get("X-OpenWA-Signature"), token):
         logger.warning("Rejected OpenWA webhook call with invalid/missing signature")
         return Response(status_code=403)
 

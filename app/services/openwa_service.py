@@ -86,19 +86,29 @@ def session_status() -> dict:
         return {"status": "unreachable", "error": str(exc)}
 
 
-def verify_webhook_signature(raw_body: bytes, signature_header: str | None) -> bool:
+def verify_webhook_signature(raw_body: bytes, signature_header: str | None, url_token: str = "") -> bool:
     """Validates OpenWA's X-OpenWA-Signature header (`sha256=` + HMAC-SHA256
     of the raw body, keyed with the secret set when the webhook was
     registered). Without it, anyone who can reach the endpoint could forge a
     YES and write fabricated rows into the sheet.
+
+    A webhook created in OpenWA's dashboard has no secret (the form has no
+    field for one), so it sends no signature; for those, the secret can ride
+    in the webhook URL instead (`?token=<OPENWA_WEBHOOK_SECRET>`), the same
+    scheme the Gmail push endpoint uses.
     """
     if not settings.openwa_webhook_secret:
         logger.warning("OPENWA_WEBHOOK_SECRET not set — refusing to accept unverifiable webhook calls")
         return False
     if not signature_header or not signature_header.startswith("sha256="):
+        if url_token:
+            if hmac.compare_digest(url_token.encode(), settings.openwa_webhook_secret.encode()):
+                return True
+            logger.warning("OpenWA webhook ?token= doesn't match OPENWA_WEBHOOK_SECRET")
+            return False
         logger.warning(
-            "OpenWA webhook call has no X-OpenWA-Signature header — the webhook was "
-            "registered in OpenWA without a secret"
+            "OpenWA webhook call has no X-OpenWA-Signature header and no ?token= — add "
+            "?token=<OPENWA_WEBHOOK_SECRET> to the webhook URL in OpenWA"
         )
         return False
 

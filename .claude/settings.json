@@ -8,7 +8,9 @@
       "PowerShell(python -m py_compile app/config.py app/services/google_auth.py)",
       "PowerShell(git ls-files credentials; git log --oneline -3; python -m py_compile app/services/google_auth.py; if \\($?\\) { \"compile ok\" }; \\(Get-Item credentials\\\\token.json\\).Length)",
       "PowerShell(python -m py_compile app/services/openwa_service.py)",
-      "PowerShell(python -m py_compile app/worker/scheduler.py)"
+      "PowerShell(python -m py_compile app/worker/scheduler.py)",
+      "WebFetch(domain:github.com)",
+      "PowerShell(python -m py_compile app/services/openwa_service.py app/routers/openwa_webhook.py)"
     ]
   }
 }
