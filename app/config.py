@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     # Google OAuth (Gmail + Sheets share one token — see scripts/gmail_oauth_setup.py)
     google_client_secrets_file: str = "./credentials/client_secret.json"
     google_token_file: str = "./credentials/token.json"
+    # Full contents of token.json, for hosts with no file upload (Railway):
+    # written to google_token_file when that file doesn't exist yet.
+    google_token_json: str = ""
 
     # Gmail API push (real-time ingestion)
     google_pubsub_topic: str = ""  # full form: projects/<project-id>/topics/<topic-name>

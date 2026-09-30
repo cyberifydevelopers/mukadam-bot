@@ -39,11 +39,20 @@ class GoogleAuthError(Exception):
 
 
 def _load_credentials() -> Credentials:
+    if not os.path.exists(settings.google_token_file) and settings.google_token_json:
+        # Refreshed tokens are written back to this file below; on a host with
+        # an ephemeral disk it's lost on redeploy and re-created from the env
+        # var, whose refresh token still works.
+        os.makedirs(os.path.dirname(settings.google_token_file) or ".", exist_ok=True)
+        with open(settings.google_token_file, "w") as f:
+            f.write(settings.google_token_json)
+
     if not os.path.exists(settings.google_token_file):
         raise GoogleAuthError(
             f"{settings.google_token_file} not found. Run "
             "`python scripts/gmail_oauth_setup.py` once, locally with a browser "
-            "available, to complete the OAuth consent flow and create it."
+            "available, to complete the OAuth consent flow and create it "
+            "(or set GOOGLE_TOKEN_JSON to its contents)."
         )
 
     # Use the scopes the token was actually granted (saved in the file), not
