@@ -10,7 +10,9 @@
       "PowerShell(python -m py_compile app/services/openwa_service.py)",
       "PowerShell(python -m py_compile app/worker/scheduler.py)",
       "WebFetch(domain:github.com)",
-      "PowerShell(python -m py_compile app/services/openwa_service.py app/routers/openwa_webhook.py)"
+      "PowerShell(python -m py_compile app/services/openwa_service.py app/routers/openwa_webhook.py)",
+      "PowerShell($line = Get-Content .env | Where-Object { $_ -match '^OPENWA_WEBHOOK_SECRET=' } | Select-Object -First 1; $s = \\($line -replace '^OPENWA_WEBHOOK_SECRET=', ''\\).Trim\\(\\).Trim\\('\"'\\); Set-Clipboard -Value $s; \"copied, length $\\($s.Length\\)\")",
+      "Bash(curl -s -m 20 \"https://mukadam-bot-production.up.railway.app/api/whatsapp/messages\")"
     ]
   }
 }

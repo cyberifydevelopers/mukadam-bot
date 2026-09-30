@@ -155,7 +155,15 @@ def _sender_phone(data: dict) -> str:
         return sender.split("@", 1)[0]
     # @lid privacy id — OpenWA resolves the real number when
     # RESOLVE_LID_TO_PHONE=true is set on the gateway.
-    return data.get("senderPhone") or (data.get("contact") or {}).get("number") or ""
+    phone = data.get("senderPhone") or (data.get("contact") or {}).get("number") or ""
+    if not phone:
+        logger.warning(
+            "OpenWA message from %s carries no phone number (set RESOLVE_LID_TO_PHONE=true "
+            "on the OpenWA gateway); payload fields: %s",
+            sender,
+            sorted(data.keys()),
+        )
+    return re.sub(r"\D", "", phone)
 
 
 def parse_reply(webhook_payload: dict) -> TextReply | None:
