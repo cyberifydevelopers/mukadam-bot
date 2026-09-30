@@ -12,7 +12,16 @@
       "WebFetch(domain:github.com)",
       "PowerShell(python -m py_compile app/services/openwa_service.py app/routers/openwa_webhook.py)",
       "PowerShell($line = Get-Content .env | Where-Object { $_ -match '^OPENWA_WEBHOOK_SECRET=' } | Select-Object -First 1; $s = \\($line -replace '^OPENWA_WEBHOOK_SECRET=', ''\\).Trim\\(\\).Trim\\('\"'\\); Set-Clipboard -Value $s; \"copied, length $\\($s.Length\\)\")",
-      "Bash(curl -s -m 20 \"https://mukadam-bot-production.up.railway.app/api/whatsapp/messages\")"
+      "Bash(curl -s -m 20 \"https://mukadam-bot-production.up.railway.app/api/whatsapp/messages\")",
+      "Bash(python -c \"import json,sys; [print\\(m['id'],m['direction'],m['peer_number'],m['status'],repr\\(m['text'][:25]\\),m['created_at'],\\(m['error'] or ''\\)[:80]\\) for m in json.load\\(sys.stdin\\)[:12]]\")",
+      "Bash(curl -s -m 20 -o /tmp/owa.json -w 'HTTP %{http_code}\\\\n' https://openwa.cyberify.co/api/docs-json)",
+      "Bash(python -c \"import json; d=json.load\\(open\\('/tmp/owa.json'\\)\\); [print\\(m.upper\\(\\),p\\) for p,v in d['paths'].items\\(\\) for m in v if any\\(w in p.lower\\(\\) for w in ['lid','contact','webhook','chat','message','config','setting']\\)]\")",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); d=d.get\\('data',d\\) if isinstance\\(d,dict\\) else d; [print\\(s.get\\('id'\\),s.get\\('name'\\),s.get\\('status'\\),s.get\\('phone'\\),'connectedAt',s.get\\('connectedAt'\\),'err',s.get\\('lastError'\\)\\) for s in d]\")",
+      "PowerShell(git add app/services/openwa_service.py)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
     ]
   }
 }
