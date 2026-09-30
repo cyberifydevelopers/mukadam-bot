@@ -149,14 +149,45 @@ _YES_EMOJI = {"👍", "✅", "✔", "☑", "👌", "💯"}
 _NO_EMOJI = {"👎", "❌", "✖", "🚫"}
 
 
+# "…@lid" → approver phone digits, learned from OpenWA's contacts/check.
+_LID_TO_PHONE: dict[str, str] = {}
+
+
+def _phone_for_lid(lid: str) -> str:
+    """Maps a sender's @lid privacy id back to a phone number by asking
+    OpenWA which @lid each approver number (NOTIFY_WHATSAPP_NUMBERS) has.
+    Only approvers need resolving — nobody else's YES is ever acted on."""
+    if lid not in _LID_TO_PHONE:
+        for number in settings.notify_numbers_list:
+            digits = re.sub(r"\D", "", number)
+            if digits in _LID_TO_PHONE.values():
+                continue
+            try:
+                resp = httpx.get(
+                    f"{settings.openwa_url.rstrip('/')}/api/sessions/{settings.openwa_session_id}"
+                    f"/contacts/check/{digits}",
+                    headers={"X-API-Key": settings.openwa_api_key},
+                    timeout=15,
+                )
+                resp.raise_for_status()
+                whatsapp_id = resp.json().get("whatsappId") or ""
+            except (httpx.HTTPError, ValueError) as exc:
+                logger.warning("OpenWA contacts/check for %s failed: %s", digits, exc)
+                continue
+            if whatsapp_id.endswith("@lid"):
+                _LID_TO_PHONE[whatsapp_id] = digits
+    return _LID_TO_PHONE.get(lid, "")
+
+
 def _sender_phone(data: dict) -> str:
     sender = data.get("from", "")
     if sender.endswith("@c.us"):
         return sender.split("@", 1)[0]
     # @lid privacy id — OpenWA resolves the real number when
     # RESOLVE_LID_TO_PHONE=true is set on the gateway. Without that, a 1:1
-    # chat's chatId is still the other party's @c.us id (groups are filtered
-    # out before this is called), e.g. from "2044…@lid", chatId "92309…@c.us".
+    # chat's chatId may still be the other party's @c.us id (groups are
+    # filtered out before this is called); failing both, ask OpenWA which
+    # approver number that @lid belongs to.
     chat_id = data.get("chatId") or ""
     phone = (
         data.get("senderPhone")
@@ -164,10 +195,14 @@ def _sender_phone(data: dict) -> str:
         or (chat_id.split("@", 1)[0] if chat_id.endswith("@c.us") else "")
     )
     if not phone:
+        lid = sender if sender.endswith("@lid") else chat_id if chat_id.endswith("@lid") else ""
+        if lid:
+            phone = _phone_for_lid(lid)
+    if not phone:
         logger.warning(
-            "OpenWA message from %s carries no phone number (set RESOLVE_LID_TO_PHONE=true "
-            "on the OpenWA gateway); payload fields: %s",
+            "OpenWA message from %s (chatId %s) matches no approver number; payload fields: %s",
             sender,
+            chat_id,
             sorted(data.keys()),
         )
     return re.sub(r"\D", "", phone)
