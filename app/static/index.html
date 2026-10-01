@@ -155,6 +155,9 @@
       <a href="#emails" data-tab="emails">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>
         Emails <span class="count" id="count-emails" hidden></span></a>
+      <a href="#invoices" data-tab="invoices">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+        Extracted data</a>
       <a href="#whatsapp" data-tab="whatsapp">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.4 8.4 0 0 1-12.3 7.4L3 21l2.1-5.6A8.4 8.4 0 1 1 21 11.5z"/></svg>
         WhatsApp</a>
@@ -459,7 +462,7 @@ const views = {
     }
 
     return pageHeader(`${inv.bank_name} · #${inv.id}`, `${statusBadge(inv.status)} <span class="muted">${esc(inv.pdf_filename.replace(/^[^_]+_/, ""))}</span>`,
-      `<a class="btn" href="#invoices">← Back</a>
+      `<button data-action="back">← Back</button>
        <a class="btn" href="/api/invoices/${inv.id}/pdf" target="_blank" rel="noopener">${content.kind === "email" ? "Open email" : "Open file"} ↗</a>
        <button class="danger" data-action="delete" data-id="${inv.id}" data-name="${esc(inv.pdf_filename.replace(/^[^_]+_/, ""))}">🗑 Delete</button>
        ${inv.status === "FAILED_PARSE" ? `<button class="primary" data-action="reparse" data-id="${inv.id}">↻ Re-parse PDF</button>` : ""}
@@ -640,6 +643,11 @@ document.addEventListener("click", async (ev) => {
   if (row && row.dataset.href && !ev.target.closest("a, button")) { location.hash = row.dataset.href; return; }
   const btn = ev.target.closest("button[data-action]");
   if (!btn) return;
+  if (btn.dataset.action === "back") {
+    // Return to whichever page linked here; a directly opened link has none.
+    if (navigatedInApp) history.back(); else location.hash = "#overview";
+    return;
+  }
   if (btn.dataset.action === "delete" && !confirm(
     `Delete "${btn.dataset.name}"?
 
@@ -693,7 +701,9 @@ document.addEventListener("submit", async (ev) => {
   }
 });
 
-window.addEventListener("hashchange", () => render());
+// False until the first in-app navigation: Back then has a page of ours to return to.
+let navigatedInApp = false;
+window.addEventListener("hashchange", () => { navigatedInApp = true; render(); });
 render();
 refreshSidebar();
 // Live-ish: pick up new emails, replies and delivery ticks without a manual reload.
