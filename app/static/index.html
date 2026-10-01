@@ -517,7 +517,7 @@ const views = {
           style="flex:1;min-width:200px;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font:inherit;background:var(--bg);color:var(--fg)">
         <button type="submit">Save number</button>
         <div class="muted" style="font-size:12px;flex-basis:100%">Full number with country code (e.g. 923001234567). New prompts go to this number, and Yes/No replies are accepted from it. Prompts already sent stay with the number they went to.</div>
-      </form>${wa && !ready ? `<div class="panel-body" style="padding-top:0"><div class="alert bad">OpenWA isn't connected${wa.error ? `: ${esc(wa.error)}` : ""}. Make sure Docker is running and the session is linked at <a href="http://localhost:2785" target="_blank" rel="noopener">localhost:2785</a>.</div></div>` : ""}</div>
+      </form>${wa && !ready ? `<div class="panel-body" style="padding-top:0"><div class="alert bad">${openwaProblem(wa, s.whatsapp.openwa_url)}</div></div>` : ""}</div>
       <div class="panel"><h2>Message log <span class="right">${msgs.length} messages</span></h2>
         ${msgs.length ? `<div class="table-wrap"><table><thead><tr><th>Time</th><th>Direction</th><th>Number</th><th>Message</th><th>For</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`
           : `<div class="empty-state">No messages yet. When a PDF is extracted, the confirmation prompt will show up here.</div>`}
@@ -551,6 +551,15 @@ const views = {
       </div></div>`;
   },
 };
+
+// Why the OpenWA session can't send, and what to do about it on the gateway.
+function openwaProblem(wa, url) {
+  const link = url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(url.replace(/^https?:\/\//, ""))}</a>` : "the OpenWA dashboard";
+  if (wa.status === "qr_ready") return `The WhatsApp session is waiting for a QR scan. Open the session in ${link} and scan the QR from the bot phone (WhatsApp → Linked devices).`;
+  if (wa.status === "unreachable") return `Can't reach OpenWA at ${link}${wa.error ? `: ${esc(wa.error)}` : ""}. Check that the gateway is up.`;
+  if (wa.status === "not_configured") return "OPENWA_API_KEY / OPENWA_SESSION_ID aren't set.";
+  return `The WhatsApp session is ${esc(wa.status)}${wa.error ? `: ${esc(wa.error)}` : ""}. Reconnect it in ${link}.`;
+}
 
 function txnTable(list, { showPdf }) {
   return `<div class="table-wrap scroll"><table>

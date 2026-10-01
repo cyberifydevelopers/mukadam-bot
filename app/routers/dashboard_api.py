@@ -174,6 +174,7 @@ def status(db: Session = Depends(get_db)):
             "notify_numbers": settings.notify_numbers_list,
             "notify_numbers_source": runtime_settings.notify_numbers_source(db),
             "openwa": openwa_service.session_status() if settings.whatsapp_provider == "openwa" else None,
+            "openwa_url": settings.openwa_url if settings.whatsapp_provider == "openwa" else None,
         },
         "sheets": {
             "configured": bool(settings.google_sheets_spreadsheet_id),
