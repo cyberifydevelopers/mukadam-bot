@@ -25,7 +25,7 @@ import logging
 import os
 import re
 
-from openai import APIError, OpenAI
+from openai import APIConnectionError, APIError, APITimeoutError, OpenAI
 
 from app.config import settings
 from app.parsers.base import ExtractedInvoice
@@ -238,6 +238,32 @@ class LlmParseError(Exception):
     pass
 
 
+def _api_error(exc: APIError) -> LlmParseError:
+    """An OpenRouter failure as a plain-language message for the dashboard —
+    the people reading it aren't developers. The raw error goes to the log."""
+    logger.warning("OpenRouter API call failed: %s", exc)
+    status = getattr(exc, "status_code", None)
+    if status == 402:
+        message = (
+            "The AI service has run out of credits. Please add credits to the OpenRouter "
+            "account (openrouter.ai/settings/credits), then press Retry."
+        )
+    elif status == 401:
+        message = (
+            "The AI service rejected the API key — it may be wrong or expired. Please "
+            "check OPENROUTER_API_KEY in the settings, then press Retry."
+        )
+    elif status == 429:
+        message = "The AI service is busy (too many requests right now). Please wait a minute and press Retry."
+    elif isinstance(exc, (APIConnectionError, APITimeoutError)):
+        message = "Couldn't reach the AI service — check the internet connection, then press Retry."
+    elif status is not None and status >= 500:
+        message = "The AI service is having a temporary problem on its side. Please try again in a few minutes."
+    else:
+        message = f"The AI service returned an error ({status or 'unknown'}). Please press Retry; if it keeps happening, contact support."
+    return LlmParseError(message)
+
+
 _client: OpenAI | None = None
 
 
@@ -245,7 +271,7 @@ def openrouter_client() -> OpenAI:
     """Shared OpenRouter client (OpenAI-compatible API)."""
     global _client
     if not settings.openrouter_api_key:
-        raise LlmParseError("OPENROUTER_API_KEY not configured — required for LLM classification/extraction")
+        raise LlmParseError("The AI service isn't set up yet — OPENROUTER_API_KEY is missing from the settings.")
     if _client is None:
         _client = OpenAI(
             api_key=settings.openrouter_api_key,
@@ -303,7 +329,7 @@ class LlmInvoiceParser:
                 messages=[{"role": "user", "content": content}],
             )
         except APIError as exc:
-            raise LlmParseError(f"OpenRouter API call failed: {exc}") from exc
+            raise _api_error(exc) from exc
 
         return self._to_extracted_invoice(response, sanity_check_text=text, method=method)
 
@@ -354,7 +380,7 @@ class LlmInvoiceParser:
                 ],
             )
         except APIError as exc:
-            raise LlmParseError(f"OpenRouter API call failed: {exc}") from exc
+            raise _api_error(exc) from exc
 
         # No text layer to regex against here, so the sanity check can only
         # report "no_regex_match" (uncorroborated, not necessarily wrong) —
