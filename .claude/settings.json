@@ -22,7 +22,9 @@
       "PowerShell(git add app/services/openwa_service.py)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git fetch *)"
+      "Bash(git fetch *)",
+      "PowerShell(try { \\(Invoke-WebRequest -UseBasicParsing https://openwa.cyberify.co/api/health -TimeoutSec 15\\).Content } catch { $_.Exception.Message })",
+      "PowerShell(\\(Get-Command railway -ErrorAction SilentlyContinue\\).Source)"
     ]
   }
 }
