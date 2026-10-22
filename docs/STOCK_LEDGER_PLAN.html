@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock Ledger Plan</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --surface-2: #f0f2f5;
+    --text: #1b1f24;
+    --muted: #5b6573;
+    --border: #dde1e7;
+    --accent: #0f766e;
+    --accent-soft: #e3f4f1;
+    --new: #2563eb;
+    --new-soft: #e8efff;
+    --warn: #b45309;
+    --warn-soft: #fdf3e2;
+    --sheet-head: #1f3b5a;
+    --sheet-head-text: #ffffff;
+    --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111418;
+      --surface: #1a1f25;
+      --surface-2: #222830;
+      --text: #e7eaee;
+      --muted: #9aa4b1;
+      --border: #2f3640;
+      --accent: #2dd4bf;
+      --accent-soft: #123532;
+      --new: #7aa2ff;
+      --new-soft: #1a2747;
+      --warn: #f5b454;
+      --warn-soft: #3a2a12;
+      --sheet-head: #2a4a6e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #111418;
+    --surface: #1a1f25;
+    --surface-2: #222830;
+    --text: #e7eaee;
+    --muted: #9aa4b1;
+    --border: #2f3640;
+    --accent: #2dd4bf;
+    --accent-soft: #123532;
+    --new: #7aa2ff;
+    --new-soft: #1a2747;
+    --warn: #f5b454;
+    --warn-soft: #3a2a12;
+    --sheet-head: #2a4a6e;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 32px 16px 64px; }
+  header { margin-bottom: 28px; }
+  .eyebrow { color: var(--accent); font-weight: 600; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 6px 0 10px; }
+  h2 { font-size: 21px; margin: 0 0 4px; }
+  h3 { font-size: 16px; margin: 0 0 6px; }
+  p { margin: 0 0 10px; }
+  .lead { color: var(--muted); font-size: 16px; max-width: 760px; }
+  .muted { color: var(--muted); }
+  code { font-family: var(--mono); font-size: 13px; background: var(--surface-2); padding: 1px 6px; border-radius: 4px; }
+
+  nav.toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; }
+  nav.toc a {
+    color: var(--text); text-decoration: none; font-size: 13px;
+    border: 1px solid var(--border); background: var(--surface);
+    padding: 5px 12px; border-radius: 999px;
+  }
+  nav.toc a:hover { border-color: var(--accent); color: var(--accent); }
+
+  section {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 24px; margin-bottom: 20px;
+  }
+  .section-sub { color: var(--muted); margin-bottom: 18px; }
+
+  /* Before / after */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card { border: 1px solid var(--border); border-radius: 10px; padding: 16px; background: var(--surface-2); }
+  .card.after { border-color: var(--accent); background: var(--accent-soft); }
+  .card ul { margin: 6px 0 0; padding-left: 18px; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; margin-bottom: 8px; }
+  .tag.old { background: var(--border); color: var(--muted); }
+  .tag.newt { background: var(--accent); color: var(--surface); }
+
+  /* Flow */
+  .flow { list-style: none; margin: 0; padding: 0; position: relative; }
+  .step { display: grid; grid-template-columns: 44px 1fr; gap: 14px; position: relative; padding-bottom: 18px; }
+  .step:not(:last-child)::before {
+    content: ""; position: absolute; left: 21px; top: 44px; bottom: 0;
+    width: 2px; background: var(--border);
+  }
+  .dot {
+    width: 44px; height: 44px; border-radius: 50%;
+    display: grid; place-items: center; font-weight: 700;
+    background: var(--surface-2); border: 2px solid var(--border); color: var(--muted);
+  }
+  .step.is-new .dot { background: var(--new-soft); border-color: var(--new); color: var(--new); }
+  .step-body { padding-top: 8px; }
+  .step-body .who { font-size: 12px; color: var(--muted); }
+  .pill-new { font-size: 11px; font-weight: 700; color: var(--new); background: var(--new-soft); border-radius: 4px; padding: 1px 7px; margin-left: 6px; vertical-align: 2px; }
+  .branch {
+    margin-top: 10px; border: 1px dashed var(--new); border-radius: 10px; padding: 14px 16px;
+    background: var(--new-soft);
+  }
+  .branch ol { margin: 6px 0 0; padding-left: 20px; }
+  .branch li { margin-bottom: 6px; }
+  .decision {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px;
+  }
+  .decision div { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+  .decision b { display: block; font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+
+  /* Sheet mockup */
+  .sheet-tabs { display: flex; gap: 2px; overflow-x: auto; margin-top: 10px; }
+  .sheet-tabs span {
+    font-size: 12px; padding: 6px 14px; background: var(--surface-2); border: 1px solid var(--border);
+    border-top: none; border-radius: 0 0 6px 6px; white-space: nowrap; color: var(--muted);
+  }
+  .sheet-tabs span.active { background: var(--surface); color: var(--accent); font-weight: 700; border-color: var(--accent); }
+  .sheet { border: 1px solid var(--border); border-radius: 10px 10px 0 0; overflow: hidden; }
+  .scroll { overflow-x: auto; }
+  .letterhead { text-align: center; padding: 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+  .letterhead .t { font-weight: 700; letter-spacing: .04em; }
+  .letterhead .s { font-size: 13px; color: var(--muted); }
+  .addr { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 12px 16px; font-size: 13px; border-bottom: 1px solid var(--border); }
+
+  .position { padding: 14px 16px; border-bottom: 1px solid var(--border); background: var(--accent-soft); }
+  .position h3 { color: var(--accent); }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border: 1px solid var(--border); padding: 6px 8px; text-align: right; white-space: nowrap; }
+  th { background: var(--sheet-head); color: var(--sheet-head-text); font-weight: 600; text-align: center; }
+  td.l { text-align: left; }
+  tr.total td { font-weight: 700; background: var(--surface-2); }
+  tr.dp td { font-weight: 700; color: var(--accent); }
+  tr.newrow td { background: var(--new-soft); }
+  td.carry { color: var(--new); font-weight: 700; }
+  td.formula { font-family: var(--mono); font-size: 12px; }
+  td.empty { color: var(--warn); font-style: italic; }
+  .ledger-cap { padding: 10px 16px; font-size: 12px; color: var(--muted); display: flex; gap: 16px; flex-wrap: wrap; }
+  .legend { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; border: 1px solid var(--border); }
+
+  /* Formulas */
+  .formulas { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .f { border: 1px solid var(--border); border-radius: 10px; padding: 14px; background: var(--surface-2); }
+  .f .name { font-weight: 700; }
+  .f .eq { font-family: var(--mono); font-size: 13px; color: var(--accent); margin: 4px 0 6px; }
+  .f .ex { font-size: 13px; color: var(--muted); }
+
+  .callout { border-left: 4px solid var(--warn); background: var(--warn-soft); padding: 12px 16px; border-radius: 0 8px 8px 0; margin-top: 16px; }
+  .callout b { color: var(--warn); }
+
+  /* Edge cases */
+  .cases { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+  .case { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .case .q { font-weight: 700; margin-bottom: 4px; }
+
+  /* Files */
+  .files td { text-align: left; white-space: normal; vertical-align: top; }
+  .files th { text-align: left; }
+  .files td:first-child { white-space: nowrap; }
+  .badge { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
+  .badge.n { background: var(--new-soft); color: var(--new); }
+  .badge.c { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+
+  /* Decisions */
+  .qs { counter-reset: q; list-style: none; padding: 0; margin: 0; }
+  .qs li { counter-increment: q; display: grid; grid-template-columns: 34px 1fr; gap: 12px; padding: 14px 0; border-top: 1px solid var(--border); }
+  .qs li:first-child { border-top: none; }
+  .qs li::before {
+    content: counter(q); width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
+    background: var(--accent-soft); color: var(--accent); font-weight: 700;
+  }
+  .rec { display: inline-block; margin-top: 4px; font-size: 13px; color: var(--accent); }
+
+  @media (max-width: 680px) {
+    .compare, .decision { grid-template-columns: 1fr; }
+    h1 { font-size: 24px; }
+    section { padding: 18px 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Mukadam Bot · Plan (abhi kaam shuru nahi hua)</div>
+    <h1>Stock Ledger: har delivery order Google Sheet mein, usi stock-report format mein</h1>
+    <p class="lead">Har customer + bank (jaise <b>Duo Foam – Meezan Bank</b>) ki apni tab hogi. Har confirmed delivery order pichli entries ke neeche nayi row banega, aur balance, value aur Drawing Power Sheet khud calculate karegi.</p>
+    <nav class="toc">
+      <a href="#abhi">Abhi vs. Naya</a>
+      <a href="#flow">Poora Flow</a>
+      <a href="#sheet">Sheet kaisi dikhegi</a>
+      <a href="#calc">Calculation</a>
+      <a href="#cases">Khaas halaat</a>
+      <a href="#code">Code changes</a>
+      <a href="#faislay">Aapke faislay</a>
+    </nav>
+  </header>
+
+  <!-- 1. Before / after -->
+  <section id="abhi">
+    <h2>Abhi kya hota hai, aur kya badlega</h2>
+    <p class="section-sub">Email → review → YES wala hissa waisa hi rahega. Sirf YES ke baad ek naya qadam judega.</p>
+    <div class="compare">
+      <div class="card">
+        <span class="tag old">Abhi</span>
+        <h3>Har DO ki alag file</h3>
+        <ul>
+          <li>YES pe bank ki tab (jaise <code>MEEZAN</code>) mein ek simple row: Invoice ID, Amount, Sender…</li>
+          <li>Phir ek <b>nayi xlsx/PDF</b> stock report banti hai aur WhatsApp pe chali jati hai.</li>
+          <li>Har report alag file hai. Koi running record nahi, pichla balance yaad nahi rehta.</li>
+        </ul>
+      </div>
+      <div class="card after">
+        <span class="tag newt">Naya</span>
+        <h3>Ek chalta hua ledger</h3>
+        <ul>
+          <li>Har customer + bank ki <b>apni tab</b>, sample report jaisi formatting ke saath.</li>
+          <li>Har naya DO <b>neeche nayi row</b>. Purana record mehfooz rehta hai.</li>
+          <li>Opening balance pichli row se khud aata hai. Value, margin aur DP formulas se khud calculate hote hain.</li>
+          <li>Upar "Current Position" mein hamesha aaj ka stock aur Drawing Power.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Flow -->
+  <section id="flow">
+    <h2>Poora Flow</h2>
+    <p class="section-sub">Neeli steps <span class="pill-new">NAYA</span> hain. Baqi sab pehle se chal raha hai.</p>
+
+    <ol class="flow">
+      <li class="step">
+        <div class="dot">1</div>
+        <div class="step-body">
+          <h3>Email aati hai</h3>
+          <p class="muted">Bank ya customer ki email, PDF ke saath (delivery order / L/C). Gmail se bot utha leta hai.</p>
+        </div>
+      </li>
+      <li class="step">
+        <div class="dot">2</div>
+        <div class="step-body">
+          <h3>Bot document parhta hai</h3>
+          <p class="muted">LLM batata hai ke yeh delivery order hai, aur nikaal leta hai: customer (Duo Foam), bank (Meezan), godown, aur har item ki line (opening, received, delivered, balance).</p>
+        </div>
+      </li>
+      <li class="step">
+        <div class="dot">3</div>
+        <div class="step-body">
+          <h3>WhatsApp pe review</h3>
+          <p class="muted">Approver ko summary jati hai. Wo <b>YES</b> ya <b>NO</b> bhejta hai (ya ✅ reaction).</p>
+        </div>
+      </li>
+      <li class="step">
+        <div class="dot">4</div>
+        <div class="step-body">
+          <h3>YES → bank tab mein row</h3>
+          <p class="muted">Jaise abhi hota hai: maujooda sheet ki bank tab mein ek row.</p>
+        </div>
+      </li>
+      <li class="step is-new">
+        <div class="dot">5</div>
+        <div class="step-body">
+          <h3>Stock Ledger mein entry <span class="pill-new">NAYA</span></h3>
+          <p class="muted">Agar document delivery order hai to bot yeh karega:</p>
+          <div class="branch">
+            <ol>
+              <li><b>Tab dhoondo:</b> naam customer + bank se, jaise <code>Duo Foam - Meezan</code>.</li>
+              <li>
+                <b>Tab pehle se hai?</b>
+                <div class="decision">
+                  <div><b>Nahi (pehla DO)</b>Bank ki master template tab (<code>_TEMPLATE_Meezan</code>) ko <b>copy</b> karke nayi tab. Letterhead, columns, rang, sab sample jaisa.</div>
+                  <div><b>Haan</b>Usi tab mein aage chalo.</div>
+                </div>
+              </li>
+              <li><b>Duplicate check:</b> yeh DO pehle lag chuka hai? To kuch nahi karna. WhatsApp ka retry ya do dafa YES aane se double entry nahi hogi.</li>
+              <li><b>Opening balance:</b> har item ka pichla "Balance on Hand" dhoondo. DO ka opening us se match na kare to row pe ⚠️ flag.</li>
+              <li><b>Rows append:</b> DO ki har item line ek nayi row, Date aur DO # ke saath, formulas samet.</li>
+              <li><b>Current Position</b> (upar wala box) formulas ki wajah se khud update ho jata hai.</li>
+            </ol>
+          </div>
+        </div>
+      </li>
+      <li class="step">
+        <div class="dot">6</div>
+        <div class="step-body">
+          <h3>WhatsApp pe jawab</h3>
+          <p class="muted">"Saved ✅", aur jaise abhi PDF/xlsx report jati hai. <span class="pill-new">NAYA</span> Saath mein ledger tab ka link bhi, aur ⚠️ ho to opening mismatch ka warning.</p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <!-- 3. Sheet mockup -->
+  <section id="sheet">
+    <h2>Google Sheet kaisi dikhegi</h2>
+    <p class="section-sub">Misaal: <b>Duo Foam – Meezan</b> tab, teen DO ke baad. Numbers sirf samjhane ke liye hain.</p>
+
+    <div class="sheet">
+      <div class="letterhead">
+        <div class="t">(STOCK REPORT-PLEDGE)</div>
+        <div class="s">As of COMMANDER INTERNATIONAL (PVT) LTD · 132-A, Canal Garden, Canal Road, Lahore</div>
+      </div>
+      <div class="addr">
+        <span>The Manager, <b>Meezan Bank Limited</b>, Credit Administration Department, Lahore.</span>
+        <span class="muted">M/S Duo Foam · Godown: Gujranwala</span>
+      </div>
+
+      <div class="position">
+        <h3>Current Position (aaj ka stock) · khud update hota hai</h3>
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr><th>Item</th><th>Balance on Hand</th><th>Rate</th><th>Total Value</th><th>Less Margin 5%</th><th>DP Value</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="l">Polyol</td><td>15</td><td>350,000</td><td>5,250,000</td><td>262,500</td><td>4,987,500</td></tr>
+              <tr><td class="l">TDI</td><td>10</td><td>400,000</td><td>4,000,000</td><td>200,000</td><td>3,800,000</td></tr>
+              <tr class="total"><td class="l">TOTAL</td><td>25</td><td></td><td>9,250,000</td><td>462,500</td><td>8,787,500</td></tr>
+              <tr class="dp"><td class="l" colspan="5">Drawing Power Rs.</td><td>8,787,500</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th><th>DO #</th><th>Description</th><th>Opening</th><th>Received</th><th>Delivered</th>
+              <th>Balance on Hand</th><th>Rate</th><th>Total Value</th><th>Margin%</th><th>Less Margin</th><th>DP Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="l">22-09-2026</td><td class="l">DO-101</td><td class="l">Polyol</td>
+              <td>0</td><td>20</td><td>0</td><td>20</td><td>350,000</td><td>7,000,000</td><td>5</td><td>350,000</td><td>6,650,000</td>
+            </tr>
+            <tr>
+              <td class="l">25-09-2026</td><td class="l">DO-108</td><td class="l">Polyol</td>
+              <td class="carry">20</td><td>0</td><td>5</td><td>15</td><td>350,000</td><td>5,250,000</td><td>5</td><td>262,500</td><td>4,987,500</td>
+            </tr>
+            <tr class="newrow">
+              <td class="l">13-10-2026</td><td class="l">DO-115</td><td class="l">TDI</td>
+              <td>0</td><td>10</td><td>0</td><td>10</td><td class="empty">khali → aap likhein</td><td>0</td><td>5</td><td>0</td><td>0</td>
+            </tr>
+            <tr class="newrow">
+              <td class="l"></td><td class="l"></td><td class="l muted">↓ agla DO yahan aayega</td>
+              <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="ledger-cap">
+        <span class="legend"><span class="sw" style="background:var(--new-soft)"></span> Aaj ki nayi entry</span>
+        <span class="legend"><span class="sw" style="background:var(--new)"></span> Opening jo pichli row se aaya</span>
+        <span class="legend"><span class="sw" style="background:var(--warn-soft)"></span> Rate DO mein nahi hota, aap type karein</span>
+      </div>
+    </div>
+    <div class="sheet-tabs">
+      <span>MEEZAN</span>
+      <span class="active">Duo Foam - Meezan</span>
+      <span>Alliance Sugar - Meezan</span>
+      <span>Thal - Allied</span>
+      <span>Jilani Poly - HabibMetro</span>
+      <span>_TEMPLATE_Meezan</span>
+    </div>
+    <p class="muted" style="margin-top:12px;font-size:13px">Current Position mein TDI ka rate 400,000 isliye hai ke misaal mein maana gaya hai ke aap ne row 3 mein rate likh diya. Likhte hi upar ka box update ho jata hai.</p>
+  </section>
+
+  <!-- 4. Calculation -->
+  <section id="calc">
+    <h2>Calculation kaise hogi</h2>
+    <p class="section-sub">Har row mein asli Google Sheets formulas honge, sirf numbers nahi. Koi bhi figure badlein to sab khud dobara calculate hoga.</p>
+    <div class="formulas">
+      <div class="f">
+        <div class="name">Opening</div>
+        <div class="eq">= us item ka pichla Balance</div>
+        <div class="ex">Polyol: DO-101 ka 20 → DO-108 ka opening 20</div>
+      </div>
+      <div class="f">
+        <div class="name">Balance on Hand</div>
+        <div class="eq">= Opening + Received − Delivered</div>
+        <div class="ex">20 + 0 − 5 = 15</div>
+      </div>
+      <div class="f">
+        <div class="name">Total Value</div>
+        <div class="eq">= Balance × Rate</div>
+        <div class="ex">15 × 350,000 = 5,250,000</div>
+      </div>
+      <div class="f">
+        <div class="name">Less Margin</div>
+        <div class="eq">= Value × Margin% ÷ 100</div>
+        <div class="ex">5,250,000 × 5% = 262,500</div>
+      </div>
+      <div class="f">
+        <div class="name">DP Value</div>
+        <div class="eq">= Value − Less Margin</div>
+        <div class="ex">5,250,000 − 262,500 = 4,987,500</div>
+      </div>
+      <div class="f">
+        <div class="name">Drawing Power (upar)</div>
+        <div class="eq">= har item ke <u>latest</u> DP ka jor</div>
+        <div class="ex">4,987,500 + 3,800,000 = 8,787,500</div>
+      </div>
+    </div>
+    <div class="callout">
+      <b>Zaroori baat:</b> ledger mein poori history hoti hai, is liye neeche "Balance" column ka seedha SUM ghalat hoga. Polyol ke 20 aur 15 dono jud jayenge, jab ke asal mein sirf 15 hain. Is liye TOTAL / Drawing Power upar wale box mein har item ki <b>sirf aakhri row</b> se nikalta hai.
+    </div>
+  </section>
+
+  <!-- 5. Edge cases -->
+  <section id="cases">
+    <h2>Khaas halaat</h2>
+    <p class="section-sub">Yeh soorat-e-haal aayein to bot kya karega.</p>
+    <div class="cases">
+      <div class="case">
+        <div class="q">Naya customer, pehla DO</div>
+        <p class="muted">Bank ki template tab copy hoti hai, customer ka naam aur godown bhara jata hai, phir pehli row.</p>
+      </div>
+      <div class="case">
+        <div class="q">Ek DO mein kai items</div>
+        <p class="muted">Har item ki alag row, sab ki same Date aur DO #.</p>
+      </div>
+      <div class="case">
+        <div class="q">DO ka opening pichle balance se match nahi</div>
+        <p class="muted">Row lagti hai lekin ⚠️ ke saath, aur WhatsApp pe batata hai: "Polyol: Sheet 15, DO mein 18".</p>
+      </div>
+      <div class="case">
+        <div class="q">Rate maloom nahi</div>
+        <p class="muted">Rate cell khali, Value/DP 0. Aap rate likhein to sab update. L/C ke saath invoice ho to rate wahan se aa jata hai.</p>
+      </div>
+      <div class="case">
+        <div class="q">Same YES do baar / webhook retry</div>
+        <p class="muted">DO ka ID row mein hota hai. Pehle se mojood ho to dobara nahi lagta.</p>
+      </div>
+      <div class="case">
+        <div class="q">Google Sheets down</div>
+        <p class="muted">Confirmation phir bhi save hota hai. Approver ko error message jata hai, aur entry dashboard se dobara bheji ja sakti hai.</p>
+      </div>
+      <div class="case">
+        <div class="q">Bank jis ki template tab nahi</div>
+        <p class="muted">Default (Meezan style) template use hogi, aur log mein note.</p>
+      </div>
+      <div class="case">
+        <div class="q">NO bheja</div>
+        <p class="muted">Ledger mein kuch nahi lagta, jaise abhi bank tab mein bhi nahi lagta.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Code -->
+  <section id="code">
+    <h2>Code mein kya badlega</h2>
+    <p class="section-sub">Developer ke liye. Kam se kam files.</p>
+    <div class="scroll">
+      <table class="files">
+        <thead><tr><th>File</th><th>Kaam</th></tr></thead>
+        <tbody>
+          <tr><td><code>app/services/stock_ledger.py</code><span class="badge n">NAYI</span></td><td>Tab dhoondna / template copy karna, duplicate check, opening carry-forward aur mismatch check, rows append (formulas ke saath) ek hi API call mein.</td></tr>
+          <tr><td><code>app/confirmation.py</code><span class="badge c">BADLEGI</span></td><td>YES pe, delivery order ho to <code>append_confirmed_invoice</code> ke baad ledger entry.</td></tr>
+          <tr><td><code>app/services/stock_report.py</code><span class="badge c">REUSE</span></td><td>Customer aur bank pehchanne ka maujooda logic (<code>pick_template</code>, <code>_customer</code>) dobara use hoga.</td></tr>
+          <tr><td><code>app/config.py</code> + <code>.env</code><span class="badge c">BADLEGI</span></td><td>Ledger spreadsheet ID, template tab names.</td></tr>
+          <tr><td><code>app/routers/openwa_webhook.py</code><span class="badge c">BADLEGI</span></td><td>WhatsApp jawab mein ledger link + ⚠️ warning.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3 style="margin-top:18px">Testing</h3>
+    <p class="muted">Pehle test spreadsheet pe 2–3 purane DO dobara chala kar dekhenge ke rows sahi jagah lag rahi hain, balance aage chal raha hai aur DP sahi hai. Phir live.</p>
+  </section>
+
+  <!-- 7. Decisions -->
+  <section id="faislay">
+    <h2>Shuru karne se pehle aapke faislay</h2>
+    <p class="section-sub">In ke jawab mil jayein to kaam shuru.</p>
+    <ol class="qs">
+      <li><div><b>Spreadsheet:</b> yeh tabs maujooda spreadsheet mein banein, ya ledger ki alag spreadsheet ho?<br><span class="rec">Mashwara: alag spreadsheet, taake bank tabs aur ledger mix na hon.</span></div></li>
+      <li><div><b>Tab ka naam:</b> customer + bank (<code>Duo Foam - Meezan</code>), ya ek bank ki ek tab mein sab customers?<br><span class="rec">Mashwara: customer + bank, kyunki har customer ka stock aur DP alag hota hai.</span></div></li>
+      <li><div><b>Opening balance:</b> pichli row se carry forward ho, ya jo DO mein likha hai wahi?<br><span class="rec">Mashwara: pichli row se, aur farq ho to ⚠️ warning.</span></div></li>
+      <li><div><b>TOTAL kahan:</b> upar "Current Position" box mein, ya neeche (har baar nayi row TOTAL ke upar insert hogi)?<br><span class="rec">Mashwara: upar. Seedha aur ghalti ka imkaan kam.</span></div></li>
+      <li><div><b>WhatsApp:</b> PDF/xlsx report abhi ki tarah jati rahe, ya us ki jagah sirf Sheet ka link?<br><span class="rec">Mashwara: dono. Report bhi aur link bhi.</span></div></li>
+    </ol>
+  </section>
+
+</div>
+</body>
+</html>

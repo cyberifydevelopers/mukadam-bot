@@ -20,12 +20,12 @@ from sqlalchemy.orm import Session, object_session
 
 from app.bank_registry import BANK_EMAIL_DOMAINS, BANK_REGISTRY, BankProfile, bank_identity, profile_by_code
 from app.config import settings
-from app.formatting import amount_line, format_items
+from app.formatting import amount_line, enclosed_documents, format_items
 from app.models import GmailSyncState, InvoiceRecord, InvoiceStatus, ProcessedEmail, StatementTransaction
 from app.parsers.base import ExtractedInvoice
 from app.parsers.llm_parser import LlmInvoiceParser, LlmParseError
 from app.parsers.statement_rows import parse_statement
-from app.services import gmail_service, openwa_service, whatsapp_service
+from app.services import gmail_service, openwa_service, stock_report, whatsapp_service
 from app.services.document_reader import Document, read_document
 from app.services.message_log import log_message
 from app.services.pdf_extractor import PdfExtractionError
@@ -377,7 +377,9 @@ def _skip_statement(record: InvoiceRecord) -> str:
 def reparse_invoice(db: Session, record: InvoiceRecord) -> None:
     """Re-runs extraction on an already-downloaded PDF (e.g. after the LLM
     call failed on a network error, or to split a statement that was read
-    before statement support existed) and starts its WhatsApp confirmation."""
+    before statement support existed) and starts its WhatsApp confirmation.
+    An already answered document goes back to waiting for a fresh YES / NO."""
+    record.confirmed_at = None
     _extract_and_send(db, record)
     db.commit()
 
@@ -530,13 +532,23 @@ def _send_confirmation(record: InvoiceRecord) -> None:
         lines += ["", *checks]
     if items:
         lines += ["", f"*Items ({len(table['rows'])})*", "", *items]
-    lines += [
-        "",
+    blocks = ["\n".join(lines)]
+    documents = enclosed_documents(extra)
+    for n, doc in enumerate(documents, start=1):
+        title = f"*Enclosed documents ({len(documents)})*\n\n" if n == 1 else ""
+        details = "\n".join(f"     {d.get('label')}: {d.get('value')}" for d in doc["details"])
+        blocks.append(f"{title}_{doc['document']}_\n{details}")
+    footer = "\n".join([
         "*Save to the Google Sheet?*",
-        "Reply YES to save, or NO to skip.",
+        # Delivery orders get their stock report back after a YES (app/routers/openwa_webhook.py).
+        "Reply YES to save and get the stock report, or NO to skip."
+        if stock_report.delivery_order(record) and settings.whatsapp_provider == "openwa"
+        else "Reply YES to save, or NO to skip.",
         f"(With several waiting, reply YES {record.id} or NO {record.id}.)",
-    ]
-    text = "\n".join(lines)
+    ])
+    messages = _pack([*blocks, footer])
+    if len(messages) > 1:
+        messages = [m if i == 0 else f"(#{record.id} continued, {i + 1}/{len(messages)})\n\n{m}" for i, m in enumerate(messages)]
     # Template body params — order must match the placeholders in the
     # approved template (see docs/WORKFLOW.md for the exact template text).
     template_params = [
@@ -545,7 +557,36 @@ def _send_confirmation(record: InvoiceRecord) -> None:
         record.txn_date or "N/A",
         record.reference_number or "N/A",
     ]
-    _deliver(record, text, template_params)
+    # Earlier parts are informational; the last (with the question) is the
+    # prompt the answer is matched against.
+    for text in messages[:-1]:
+        _deliver(record, text, [], record_id=False)
+    _deliver(record, messages[-1], template_params)
+
+
+# OpenWA rejects a text over 4096 characters; leave room for the "continued" line.
+_MESSAGE_CHARS = 3800
+
+
+def _pack(blocks: list[str], limit: int = _MESSAGE_CHARS) -> list[str]:
+    """Joins blocks (blank line between) into as few messages as fit under
+    `limit`, never splitting a block unless it alone is too long — then it's
+    split between lines."""
+    pieces: list[str] = []
+    for block in blocks:
+        while len(block) > limit:
+            cut = block.rfind("\n", 0, limit)
+            cut = cut if cut > 0 else limit
+            pieces.append(block[:cut])
+            block = block[cut:].lstrip("\n")
+        pieces.append(block)
+    messages = [pieces[0]]
+    for piece in pieces[1:]:
+        if len(messages[-1]) + 2 + len(piece) <= limit:
+            messages[-1] += "\n\n" + piece
+        else:
+            messages.append(piece)
+    return messages
 
 
 def _deliver(

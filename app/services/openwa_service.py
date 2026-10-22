@@ -20,9 +20,11 @@ Differences from the Meta path that shape this module:
    sanction. Use a dedicated number for the bot.
 """
 
+import base64
 import hashlib
 import hmac
 import logging
+import os
 import re
 from dataclasses import dataclass
 
@@ -56,6 +58,32 @@ def send_text(to_number: str, text: str) -> str:
             headers={"X-API-Key": settings.openwa_api_key},
             timeout=30,
         )
+    except httpx.HTTPError as exc:
+        raise OpenWaSendError(f"OpenWA unreachable at {settings.openwa_url}: {exc}") from exc
+
+    if resp.status_code >= 400:
+        raise OpenWaSendError(f"OpenWA error {resp.status_code}: {resp.text}")
+
+    data = resp.json()
+    try:
+        return data["messageId"]
+    except KeyError as exc:
+        raise OpenWaSendError(f"Unexpected OpenWA response: {data}") from exc
+
+
+def send_document(to_number: str, path: str, mimetype: str, caption: str | None = None, filename: str | None = None) -> str:
+    """Sends a file (shown with its own filename, or `filename`) and returns its message id."""
+    if not settings.openwa_api_key or not settings.openwa_session_id:
+        raise OpenWaSendError("OPENWA_API_KEY / OPENWA_SESSION_ID not configured")
+
+    with open(path, "rb") as f:
+        encoded = base64.standard_b64encode(f.read()).decode("ascii")
+    body = {"chatId": _chat_id(to_number), "base64": encoded, "mimetype": mimetype, "filename": filename or os.path.basename(path)}
+    if caption:
+        body["caption"] = caption
+    url = f"{settings.openwa_url.rstrip('/')}/api/sessions/{settings.openwa_session_id}/messages/send-document"
+    try:
+        resp = httpx.post(url, json=body, headers={"X-API-Key": settings.openwa_api_key}, timeout=60)
     except httpx.HTTPError as exc:
         raise OpenWaSendError(f"OpenWA unreachable at {settings.openwa_url}: {exc}") from exc
 
@@ -135,6 +163,16 @@ class TextReply:
 
 
 @dataclass
+class PdfRequest:
+    sender_phone: str  # digits only; "" when OpenWA couldn't resolve it
+    target_label: str | None  # "496" (invoice #496) or "T12" (statement transaction T12)
+    quoted_message_id: str | None  # the prompt this was sent as a reply to, if any
+    message_id: str
+    text: str
+    original: bool = False  # the document as it arrived, not the stock report built from it
+
+
+@dataclass
 class Reaction:
     message_id: str  # the message that was reacted to (our prompt)
     answer: str  # "yes" / "no"
@@ -142,6 +180,15 @@ class Reaction:
 
 
 _REPLY_RE = re.compile(r"^\s*(yes|y|no|n)\b\W*(t?\d+)?\s*$", re.IGNORECASE)
+
+# "Share pdf for 496", "send pdf #496", "pdf 496", "get file T12" — and a bare
+# "pdf" / "share pdf" sent as a reply (swipe → Reply) to one of the bot's prompts.
+# "original pdf 496" asks for the document as it arrived instead of the stock report.
+_PDF_RE = re.compile(
+    r"^\s*(?:(?:please\s+)?(?:share|send|get|give|forward|need)\s+(?:me\s+)?(?:the\s+)?)?"
+    r"(original\s+|source\s+)?(?:pdf|file|document|invoice|report)\s*(?:for|of)?\s*#?\s*(t?\d+)?\s*[.!]?\s*$",
+    re.IGNORECASE,
+)
 
 # Skin-tone variants of 👍/👎 arrive with a modifier appended, so compare the
 # base character only.
@@ -232,6 +279,33 @@ def parse_reply(webhook_payload: dict) -> TextReply | None:
         quoted_message_id=(data.get("quotedMessage") or {}).get("id"),
         message_id=data.get("id", ""),
         text=body,
+    )
+
+
+def parse_pdf_request(webhook_payload: dict) -> PdfRequest | None:
+    """A message asking for a document's original PDF ("Share pdf for 496").
+    None for anything else, and for a request that names nothing — no number
+    and not sent as a reply to one of the bot's messages."""
+    if webhook_payload.get("event") != "message.received":
+        return None
+    data = webhook_payload.get("data") or {}
+    if data.get("fromMe") or data.get("isGroup") or data.get("isStatusBroadcast"):
+        return None
+    body = data.get("body") or ""
+    match = _PDF_RE.match(body)
+    if not match:
+        return None
+    original, label = match.groups()
+    quoted = (data.get("quotedMessage") or {}).get("id")
+    if not label and not quoted:
+        return None
+    return PdfRequest(
+        sender_phone=_sender_phone(data),
+        target_label=label.upper() if label else None,
+        quoted_message_id=quoted,
+        message_id=data.get("id", ""),
+        text=body,
+        original=bool(original),
     )
 
 

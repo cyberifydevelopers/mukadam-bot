@@ -1,5 +1,7 @@
 import json
 import logging
+import mimetypes
+import os
 import re
 import threading
 
@@ -17,8 +19,8 @@ from app.confirmation import (
     pending_for_number,
 )
 from app.database import SessionLocal
-from app.models import InvoiceStatus, StatementTransaction, WhatsAppMessage
-from app.services import openwa_service
+from app.models import InvoiceRecord, InvoiceStatus, StatementTransaction, WhatsAppMessage
+from app.services import openwa_service, stock_report
 from app.services.message_log import apply_delivery_status, log_message
 
 logger = logging.getLogger(__name__)
@@ -108,6 +110,132 @@ def _acknowledge(db: Session, target: Confirmable, answer: str, ack: str) -> Non
     _send_logged(db, target.whatsapp_to_number, ack, target)
 
 
+def _send_stock_report(db: Session, record: InvoiceRecord) -> None:
+    """After a delivery order is confirmed: builds its stock report and sends
+    it back to the approver as PDF + Excel. A failure here is reported in the
+    chat but never undoes the save — the YES already went to the Sheet."""
+    to_number = record.whatsapp_to_number
+    try:
+        report = stock_report.build(record)
+    except Exception as exc:  # noqa: BLE001 — any failure is reported to the approver, not raised
+        logger.exception("Stock report for #%s failed", record.id)
+        _send_logged(db, to_number, f"Saved, but the stock report for #{record.id} couldn't be made: {exc}", record)
+        return
+
+    files = [(report.pdf_path, stock_report.PDF_MIME), (report.xlsx_path, stock_report.XLSX_MIME)]
+    files = [(path, mime) for path, mime in files if path]
+    for n, (path, mimetype) in enumerate(files):
+        caption = f"Stock report for #{record.id} — {report.customer}" if n == 0 else None
+        message_id = error = None
+        try:
+            message_id = openwa_service.send_document(to_number, path, mimetype, caption)
+        except openwa_service.OpenWaSendError as exc:
+            error = str(exc)
+            logger.error("OpenWA document send to %s failed: %s", to_number, exc)
+        log_message(
+            db,
+            direction="out",
+            provider="openwa",
+            peer_number=to_number,
+            text=f"📎 {os.path.basename(path)}" + (f"\n{caption}" if caption else ""),
+            status="failed" if error else "sent",
+            message_id=message_id,
+            error=error,
+            invoice_id=record.id,
+        )
+
+
+def _handle_pdf_request(db: Session, request: openwa_service.PdfRequest) -> dict:
+    """"Share pdf for 496": sends the stock report (PDF) made for that item
+    back to the person asking — "original pdf 496" sends the document as it
+    arrived instead. Only the approver numbers (NOTIFY_WHATSAPP_NUMBERS) can
+    ask — these are bank documents — and anyone else is ignored silently."""
+    if not request.sender_phone or request.sender_phone not in {_digits(n) for n in settings.notify_numbers_list}:
+        return {"status": "ignored"}
+    if request.message_id and (
+        db.query(WhatsAppMessage.id).filter_by(direction="in", message_id=request.message_id).first()
+    ):
+        logger.info("OpenWA re-delivered message %s — already handled, ignored", request.message_id)
+        return {"status": "duplicate"}
+
+    target = None
+    if request.target_label:
+        target = find_by_label(db, request.target_label)
+    elif request.quoted_message_id:
+        target = find_by_message_id(db, request.quoted_message_id)
+    record = db.get(InvoiceRecord, target.invoice_id) if isinstance(target, StatementTransaction) else target
+    log_message(
+        db,
+        direction="in",
+        provider="openwa",
+        peer_number=request.sender_phone,
+        text=request.text,
+        status="received",
+        message_id=request.message_id,
+        **_link_ids(record),
+    )
+
+    asked = f"#{request.target_label}" if request.target_label else "that message"
+    if record is None:
+        _send_logged(db, request.sender_phone, f"I couldn't find {asked}.", None)
+        db.commit()
+        return {"status": "ok"}
+
+    if request.original:
+        path = os.path.join(settings.pdf_storage_dir, record.pdf_filename)
+        if not os.path.exists(path):
+            _send_logged(db, request.sender_phone, f"The file for #{record.id} is no longer on the server.", record)
+            db.commit()
+            return {"status": "ok"}
+        # Stored as "<hash>_<original name>"; the person gets the original name.
+        name = record.pdf_filename.split("_", 1)[-1]
+        caption = f"Original document of #{record.id}"
+    else:
+        if not stock_report.delivery_order(record):
+            _send_logged(
+                db,
+                request.sender_phone,
+                f"#{record.id} has no stock report — only delivery orders and L/C letters get one. "
+                f"Send \"original pdf {record.id}\" for the document itself.",
+                record,
+            )
+            db.commit()
+            return {"status": "ok"}
+        try:
+            report = stock_report.latest(record) or stock_report.build(record)
+        except Exception as exc:  # noqa: BLE001 — reported to the person asking, not raised
+            logger.exception("Stock report for #%s failed", record.id)
+            _send_logged(db, request.sender_phone, f"The stock report for #{record.id} couldn't be made: {exc}", record)
+            db.commit()
+            return {"status": "ok"}
+        path = report.pdf_path
+        name = os.path.basename(path)
+        caption = f"Stock report for #{record.id} — {report.customer}"
+    message_id = error = None
+    try:
+        message_id = openwa_service.send_document(
+            request.sender_phone, path, mimetypes.guess_type(name)[0] or "application/pdf", caption, filename=name
+        )
+    except openwa_service.OpenWaSendError as exc:
+        error = str(exc)
+        logger.error("OpenWA document send to %s failed: %s", request.sender_phone, exc)
+    log_message(
+        db,
+        direction="out",
+        provider="openwa",
+        peer_number=request.sender_phone,
+        text=f"📎 {name}\n{caption}",
+        status="failed" if error else "sent",
+        message_id=message_id,
+        error=error,
+        invoice_id=record.id,
+    )
+    if error:
+        _send_logged(db, request.sender_phone, f"I couldn't send the file for #{record.id}: {error}", record)
+    db.commit()
+    return {"status": "ok"}
+
+
 def _answer(db: Session, target: Confirmable, answer: str) -> None:
     # None = already handled (OpenWA retried the delivery, or a second
     # reaction on the same prompt) — idempotent no-op.
@@ -116,6 +244,9 @@ def _answer(db: Session, target: Confirmable, answer: str) -> None:
     if ack is not None:
         _acknowledge(db, target, answer, ack)
         db.commit()
+        if answer == "yes" and isinstance(target, InvoiceRecord) and stock_report.delivery_order(target):
+            _send_stock_report(db, target)
+            db.commit()
 
 
 # Deliveries are handled one at a time: OpenWA re-sends a webhook it
@@ -170,6 +301,9 @@ def _handle_payload(db: Session, payload: dict) -> dict:
             )
         _answer(db, target, reaction.answer)
         return {"status": "ok"}
+
+    if pdf_request := openwa_service.parse_pdf_request(payload):
+        return _handle_pdf_request(db, pdf_request)
 
     reply = openwa_service.parse_reply(payload)
     if reply is None:

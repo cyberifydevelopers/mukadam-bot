@@ -137,6 +137,136 @@ _FUNCTION = {
                 },
                 "required": ["columns", "rows"],
             },
+            # Every document in a multi-document file, so nothing on the later
+            # pages is lost — shown on the WhatsApp prompt (app/pipeline.py).
+            "document_details": {
+                "type": ["array", "null"],
+                "description": (
+                    "The file often holds several documents: the bank's letter first, then what it "
+                    "encloses (bill of lading, commercial invoice, packing list, certificate of "
+                    "origin, insurance, weight / quality certificates, …). Read EVERY page. List each "
+                    "enclosed document once, in page order — not the bank's own letter (its fields "
+                    "go in the fields above), and an ORIGINAL and its COPY only once. For each, its "
+                    "key details as written: document number and date, parties (seller / shipper, "
+                    "buyer / consignee, notify), goods and type, quantity, net / gross weight, unit "
+                    "price, amount and currency, L/C number, vessel / voyage, ports, container and "
+                    "seal numbers, H.S. code, packages. A COMMERCIAL INVOICE must never be left out, "
+                    "and always with all of: invoice number and date, seller, buyer, goods, H.S. code, "
+                    "quantity, unit price, total amount and currency, L/C number, proforma invoice. "
+                    "Leave out blank or placeholder fields (e.g. "
+                    "'XXXXXXXX') and printed terms & conditions. null when the file is a single document."
+                ),
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "document": {"type": "string", "description": "e.g. 'Bill of Lading', 'Commercial Invoice'"},
+                        "details": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {"label": {"type": "string"}, "value": {"type": "string"}},
+                                "required": ["label", "value"],
+                            },
+                        },
+                    },
+                    "required": ["document", "details"],
+                },
+            },
+            # Fills the stock report sent back after a YES (app/services/stock_report.py).
+            "delivery_order": {
+                "type": ["object", "null"],
+                "description": (
+                    "Only when the bank instructs us (the muccadam) to move pledged / financed stock "
+                    "in our custody: a DELIVERY ORDER releasing stock from the godown ('Delivery order "
+                    "of stocks/assets', 'kindly take the delivery as per below details'), or an L/C "
+                    "endorsement letter whose goods are to be placed in a godown under our muccadam "
+                    "control (goods coming in). null for anything else, e.g. a collection-of-documents "
+                    "notice."
+                ),
+                "properties": {
+                    "customer_name": {
+                        "type": ["string", "null"],
+                        "description": "The client whose stock it is (who pledged it), e.g. 'Canon Foam Industries (PVT) Ltd', as written",
+                    },
+                    "pledge_location": {
+                        "type": ["string", "null"],
+                        "description": "Where the stock is held (godown / pledge site), as written",
+                    },
+                    "bank_department": {
+                        "type": ["string", "null"],
+                        "description": "The issuing bank department, if shown (e.g. 'Credit Administration Department')",
+                    },
+                    "bank_branch": {
+                        "type": ["string", "null"],
+                        "description": (
+                            "The issuing branch followed by its city, from the letterhead or footer "
+                            "address (e.g. 'Zahoor Elahi Road Branch, Lahore') — include the city"
+                        ),
+                    },
+                    "currency": {
+                        "type": ["string", "null"],
+                        "description": "Currency of rate_per_unit (e.g. 'USD', 'PKR'); null when no rate is given",
+                    },
+                    "reference_note": {
+                        "type": ["string", "null"],
+                        "description": (
+                            "One short line naming the documents, for the report: the bank letter's reference "
+                            "and date, then the invoice / bill of lading numbers and vessel when enclosed — e.g. "
+                            "'Your letter CAD/MUL/26INSU0501-00462 dated 21-09-2026; Commercial Invoice "
+                            "420028934, B/L No. 16, MV ANNE'"
+                        ),
+                    },
+                    "rows": {
+                        "type": "array",
+                        "minItems": 1,
+                        "description": (
+                            "One entry per stock line, in order, values as written including units (e.g. "
+                            "'10.710 MT', 'NIL'); null for a value the document doesn't give. Never empty: "
+                            "for an L/C letter, one line per kind of goods, with the quantity actually "
+                            "shipped under THIS L/C (its bill of lading / the invoice's shipped quantity, "
+                            "e.g. '1,800.000 MT') as quantity_received — not the L/C's maximum ('2000 MT "
+                            "minus 10 pct') and not a whole vessel's total from a surveyor's certificate"
+                        ),
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "description": {
+                                    "type": "string",
+                                    "description": (
+                                        "Short (under 50 characters, it fills one table cell): the goods and "
+                                        "their L/C number, e.g. 'Brazilian Soybeans (bulk) L/C 26INSU0501-00462' "
+                                        "or 'L/C #-02736' as written (prefix the disbursement date when the "
+                                        "document groups rows by it)"
+                                    ),
+                                },
+                                "rate_per_unit": {
+                                    "type": ["string", "null"],
+                                    "description": (
+                                        "Price per unit of the quantity, digits only (e.g. '496.91' for 'USD 496.91 "
+                                        "/MT'), from the enclosed commercial invoice; null when no price is given "
+                                        "(a delivery order has none)"
+                                    ),
+                                },
+                                "opening_balance": {"type": ["string", "null"], "description": "Balance in hand before this delivery"},
+                                "quantity_received": {
+                                    "type": ["string", "null"],
+                                    "description": "Quantity coming INTO the godown (an L/C's goods to be placed there); null on a delivery order",
+                                },
+                                "quantity_released": {
+                                    "type": ["string", "null"],
+                                    "description": "Quantity to be released / delivered OUT of the godown now; null for incoming goods",
+                                },
+                                "balance_after": {"type": ["string", "null"], "description": "Balance after delivery"},
+                            },
+                            "required": [
+                                "description", "opening_balance", "quantity_received", "quantity_released",
+                                "balance_after", "rate_per_unit",
+                            ],
+                        },
+                    },
+                },
+                "required": ["customer_name", "pledge_location", "currency", "reference_note", "rows"],
+            },
             "is_account_statement": {
                 "type": "boolean",
                 "description": (
@@ -177,7 +307,7 @@ _FUNCTION = {
     },
 }
 
-_EXTRA_FIELDS = ("issuer_name", "issuer_is_bank", "classification_reason", "document_type", "bank_name", "currency", "sender_account", "receiver_account", "purpose", "items_table", "is_account_statement", "concerns_our_company")
+_EXTRA_FIELDS = ("issuer_name", "issuer_is_bank", "classification_reason", "document_type", "bank_name", "currency", "sender_account", "receiver_account", "purpose", "items_table", "document_details", "delivery_order", "is_account_statement", "concerns_our_company")
 
 
 def _our_company_note() -> str:
@@ -187,6 +317,15 @@ def _our_company_note() -> str:
     if not names:
         return ""
     return f"\n\nOur company (for concerns_our_company): {', '.join(names)}.\n\n"
+
+# A bank letter often has its enclosures (B/L, invoices, packing lists,
+# certificates) scanned into the same file after it.
+_ALL_PAGES_INSTRUCTION = (
+    "The file may hold several documents — read every page, not just the first. The bank's "
+    "letter gives the main fields; record each document enclosed after it in document_details."
+)
+# A multi-document file's text runs long; 15k characters cut off its enclosures.
+_MAX_TEXT_CHARS = 60000
 
 _TOOLS = [{"type": "function", "function": _FUNCTION}]
 _TOOL_CHOICE = {"type": "function", "function": {"name": "record_invoice_fields"}}
@@ -292,7 +431,7 @@ class LlmInvoiceParser:
             "Extract the payment fields from this bank payment advice / "
             "invoice (text of a PDF or Word file, or the cells of a spreadsheet, "
             "one row per line). Use null for anything not actually present — "
-            "do not guess or estimate.\n\n"
+            "do not guess or estimate. " + _ALL_PAGES_INSTRUCTION + "\n\n"
         )
         if image_paths:
             instruction += (
@@ -316,7 +455,7 @@ class LlmInvoiceParser:
         self, instruction: str, text: str, method: str, image_paths: list[str] | tuple = ()
     ) -> ExtractedInvoice:
         client = self._client_or_raise()
-        content: str | list = instruction + _our_company_note() + text[:15000]
+        content: str | list = instruction + _our_company_note() + text[:_MAX_TEXT_CHARS]
         if image_paths:
             content = [{"type": "text", "text": content}, *(_image_part(p) for p in image_paths)]
 
@@ -371,7 +510,8 @@ class LlmInvoiceParser:
                                 "text": (
                                     "Extract the payment fields from this bank payment "
                                     "advice / invoice document. Use null for anything not "
-                                    "actually present — do not guess or estimate."
+                                    "actually present — do not guess or estimate. "
+                                    + _ALL_PAGES_INSTRUCTION
                                     + _our_company_note()
                                 ),
                             },

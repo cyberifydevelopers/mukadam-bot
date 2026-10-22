@@ -82,6 +82,16 @@ class Settings(BaseSettings):
 
     notify_whatsapp_numbers: str = ""
 
+    # Stock report sent back after a delivery order is confirmed
+    # (app/services/stock_report.py) — filled into the sample reports in
+    # app/stock_report_templates/ by LibreOffice ("" = find soffice on PATH /
+    # in Program Files; without it no report can be made).
+    stock_report_dir: str = "./data/stock_reports"
+    # The Excel formats the report is filled into (dashboard → Report formats);
+    # seeded from app/stock_report_templates/ the first time.
+    stock_template_dir: str = "./data/stock_templates"
+    libreoffice_path: str = ""
+
     # App/db
     database_url: str = "sqlite:///./data/mukadam_bot.db"
     pdf_storage_dir: str = "./data/pdfs"

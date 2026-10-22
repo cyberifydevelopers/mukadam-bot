@@ -71,6 +71,26 @@ def amount_line(record: InvoiceRecord) -> tuple[str, str] | None:
     return None
 
 
+_COPY_MARK = re.compile(r"\(?\b(original|copy|duplicate)\b\)?", re.IGNORECASE)
+
+
+def enclosed_documents(extra: dict) -> list[dict]:
+    """The documents enclosed with a bank letter (extra["document_details"]),
+    invoices first — the invoice data is what the approver needs most — and
+    an ORIGINAL and its COPY shown once."""
+    seen: set = set()
+    documents = []
+    for doc in extra.get("document_details") or []:
+        details = [d for d in doc.get("details") or [] if (d.get("value") or "").strip()]
+        name = " ".join(_COPY_MARK.sub("", doc.get("document") or "Document").split()) or "Document"
+        key = (name.lower(), tuple((d.get("label"), d.get("value")) for d in details))
+        if not details or key in seen:
+            continue
+        seen.add(key)
+        documents.append({"document": name, "details": details})
+    return sorted(documents, key=lambda d: "invoice" not in d["document"].lower())
+
+
 def format_items(columns: list[str], rows: list[list[str]]) -> list[str]:
     """A document's table as phone-friendly plain text: a value shared by
     every row is shown once at the top; then each row is numbered, with its

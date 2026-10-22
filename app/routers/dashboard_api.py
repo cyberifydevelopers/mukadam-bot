@@ -213,10 +213,9 @@ def sync_now(db: Session = Depends(get_db)):
 
 @router.post("/invoices/{invoice_id}/reparse")
 def reparse(invoice_id: int, db: Session = Depends(get_db)):
+    # Any document can be read again — e.g. one saved before the extraction
+    # learned something new (its enclosed documents, stock-report lines).
     record = _get_invoice(db, invoice_id)
-    retryable = (InvoiceStatus.FAILED_PARSE, InvoiceStatus.SEND_FAILED, InvoiceStatus.PENDING_CONFIRMATION)
-    if record.status not in retryable:
-        raise HTTPException(409, f"Invoice is {record.status.value}; it can't be re-parsed")
     reparse_invoice(db, record)
     return _invoice_json(record)
 
