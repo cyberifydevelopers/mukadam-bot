@@ -219,7 +219,10 @@ def _office_python(soffice: str) -> str:
     """LibreOffice's own Python on Windows (it ships with `uno`); elsewhere
     the system python3, with the python3-uno package."""
     bundled = Path(soffice).with_name("python.exe" if os.name == "nt" else "python")
-    return str(bundled) if bundled.exists() else "python3"
+    if bundled.exists():
+        return str(bundled)
+    # The apt python3-uno package only works with the distro python, not e.g. /usr/local/bin/python3 in a python image.
+    return "/usr/bin/python3" if os.path.exists("/usr/bin/python3") else "python3"
 
 
 def render(template: Template, order: dict, key: str, dated: datetime | None = None) -> StockReport:
