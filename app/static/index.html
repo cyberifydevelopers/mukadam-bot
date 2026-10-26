@@ -137,7 +137,36 @@
   .ticks { font-weight: 700; letter-spacing: -3px; padding-right: 3px; }
   .ticks.read { color: #34b7f1; } .ticks.failed { color: var(--bad); letter-spacing: 0; }
 
-  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; }
+  /* Row selection + our own confirmation dialog */
+  th.sel-col, td.sel-col { width: 36px; padding-right: 0; }
+  input.sel, input.sel-all { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); vertical-align: middle; }
+  tr.selected td { background: var(--info-bg); }
+  #selbar { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 12px;
+    background: var(--fg); color: var(--bg); padding: 10px 14px 10px 18px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+  #selbar[hidden] { display: none; }
+  #selbar button { padding: 6px 12px; }
+  button.danger-solid { background: var(--bad); border-color: var(--bad); color: #fff; }
+  button.danger-solid:hover { filter: brightness(1.1); border-color: var(--bad); }
+  .modal-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(8,12,20,.55); display: flex; align-items: center; justify-content: center; padding: 16px;
+    animation: modal-fade .12s ease-out; }
+  .modal { background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 16px; width: min(460px, 100%); padding: 24px 24px 20px;
+    box-shadow: 0 24px 60px rgba(0,0,0,.4); animation: modal-pop .14s ease-out; }
+  .modal-icon { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; background: var(--info-bg); margin-bottom: 12px; }
+  .modal-icon.bad { background: var(--bad-bg); }
+  .modal h3 { margin: 0 0 8px; font-size: 17px; }
+  .modal-body { color: var(--muted); font-size: 14px; }
+  .modal-body p { margin: 0 0 8px; }
+  .modal-body b { color: var(--fg); }
+  .modal-body .keep { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: var(--neutral-bg); font-size: 13px; }
+  .modal-type { display: block; margin-top: 14px; font-size: 13px; color: var(--muted); }
+  .modal-type input { display: block; width: 100%; margin-top: 6px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px; font: inherit; background: var(--bg); color: var(--fg); }
+  .modal-type input:focus { outline: 2px solid var(--bad); outline-offset: 0; border-color: var(--bad); }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+  .modal-actions button { min-width: 92px; justify-content: center; }
+  .modal-actions button:disabled { opacity: .45; cursor: not-allowed; }
+  @keyframes modal-fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes modal-pop { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
+  .toast { position: fixed; bottom: 80px; right: 20px; background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; }
   .toast.show { opacity: 1; }
 
   @media (max-width: 800px) {
@@ -183,6 +212,7 @@
   </aside>
   <main id="main"></main>
 </div>
+<div id="selbar" hidden></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -245,6 +275,82 @@ function pageHeader(title, sub, actions = "") {
   return `<header class="page"><div><h1>${esc(title)}</h1>${sub ? `<div class="sub">${sub}</div>` : ""}</div><div class="actions">${actions}</div></header>`;
 }
 const syncButton = `<button class="primary" data-action="sync">↻ Check Gmail now</button>`;
+const clearButton = (scope, label) => `<button class="danger" data-action="clear" data-scope="${scope}">🗑 ${esc(label)}</button>`;
+
+/* ---------- Our own confirmation dialog (instead of the browser's) ---------- */
+// body is HTML built here, with every name passed through esc(). Resolves true / false.
+function askDialog({ title, body, confirmLabel = "Delete", danger = true, typeWord = "" }) {
+  return new Promise((resolve) => {
+    const before = document.activeElement;
+    const wrap = document.createElement("div");
+    wrap.className = "modal-backdrop";
+    wrap.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-icon ${danger ? "bad" : ""}">${danger ? "🗑" : "ℹ️"}</div>
+      <h3 id="modal-title">${esc(title)}</h3>
+      <div class="modal-body">${body}</div>
+      ${typeWord ? `<label class="modal-type">Type <b>${esc(typeWord)}</b> to confirm<input type="text" autocomplete="off" spellcheck="false" placeholder="${esc(typeWord)}"></label>` : ""}
+      <div class="modal-actions"><button data-m="cancel">Cancel</button>
+        <button class="${danger ? "danger-solid" : "primary"}" data-m="ok">${esc(confirmLabel)}</button></div></div>`;
+    document.body.appendChild(wrap);
+    const ok = wrap.querySelector('[data-m="ok"]'), input = wrap.querySelector("input");
+    const done = (value) => { wrap.remove(); document.removeEventListener("keydown", onKey, true); before?.focus?.(); resolve(value); };
+    const canConfirm = () => !typeWord || input.value.trim() === typeWord;
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); done(false); }
+      else if (e.key === "Enter" && e.target.tagName !== "BUTTON") { e.preventDefault(); if (canConfirm()) done(true); }
+    };
+    if (typeWord) { ok.disabled = true; input.addEventListener("input", () => { ok.disabled = !canConfirm(); }); }
+    wrap.addEventListener("mousedown", (e) => { if (e.target === wrap) done(false); });
+    wrap.querySelector('[data-m="cancel"]').addEventListener("click", () => done(false));
+    ok.addEventListener("click", () => { if (canConfirm()) done(true); });
+    document.addEventListener("keydown", onKey, true);
+    (input || wrap.querySelector('[data-m="cancel"]')).focus();  // Cancel is the default, so Enter never deletes by accident
+  });
+}
+
+/* ---------- Ticking rows to delete several at once ---------- */
+const sel = { emails: new Set(), invoices: new Set() };
+const selBox = (kind, id) => `<input type="checkbox" class="sel" data-sel="${kind}" data-id="${id}" aria-label="Select">`;
+const selAll = (kind) => `<input type="checkbox" class="sel-all" data-sel-all="${kind}" aria-label="Select all">`;
+
+function updateSelBar() {
+  const bar = $("#selbar");
+  const parts = [];
+  if (sel.emails.size) parts.push(`${sel.emails.size} email${sel.emails.size > 1 ? "s" : ""}`);
+  if (sel.invoices.size) parts.push(`${sel.invoices.size} file${sel.invoices.size > 1 ? "s" : ""}`);
+  bar.hidden = !parts.length;
+  if (parts.length) bar.innerHTML = `<span><b>${esc(parts.join(" + "))}</b> selected</span>
+    <button class="danger-solid" data-action="delete-selected">🗑 Delete selected</button>
+    <button data-action="clear-selection">Clear</button>`;
+}
+
+// After every render (the page re-draws itself): tick what is still selected, drop what is gone.
+function applySelection() {
+  for (const kind of Object.keys(sel)) {
+    const boxes = [...document.querySelectorAll(`input.sel[data-sel="${kind}"]`)];
+    const present = new Set(boxes.map((b) => b.dataset.id));
+    for (const id of [...sel[kind]]) if (!present.has(id)) sel[kind].delete(id);
+    boxes.forEach((b) => { b.checked = sel[kind].has(b.dataset.id); b.closest("tr")?.classList.toggle("selected", b.checked); });
+    document.querySelectorAll(`input.sel-all[data-sel-all="${kind}"]`).forEach((h) => {
+      const mine = boxes.filter((b) => h.closest("table")?.contains(b));
+      h.checked = mine.length > 0 && mine.every((b) => b.checked);
+      h.indeterminate = !h.checked && mine.some((b) => b.checked);
+    });
+  }
+  updateSelBar();
+}
+
+document.addEventListener("change", (ev) => {
+  const t = ev.target;
+  if (t.matches("input.sel")) {
+    sel[t.dataset.sel][t.checked ? "add" : "delete"](t.dataset.id);
+  } else if (t.matches("input.sel-all")) {
+    const kind = t.dataset.selAll;
+    t.closest("table").querySelectorAll(`input.sel[data-sel="${kind}"]`).forEach((b) => sel[kind][t.checked ? "add" : "delete"](b.dataset.id));
+  } else return;
+  t.blur();  // a focused field would pause the page's live refresh
+  applySelection();
+});
 
 function chat(messages) {
   if (!messages.length) return `<div class="chat"><div class="muted" style="text-align:center">No WhatsApp messages yet.</div></div>`;
@@ -326,6 +432,10 @@ function docSummary(d) {
   return `<div><a href="#invoice/${d.id}">${esc(d.filename)}</a> ${statusBadge(d.status)}</div>${what ? `<div class="muted" style="font-size:12px">${esc(what)}</div>` : ""}`;
 }
 
+// The serial number of each extracted file (the "#" of the Extracted data table).
+const serials = (docs) => docs.map((d) => `<div><a href="#invoice/${d.id}"><b>#${d.id}</b></a></div>`).join("") || `<span class="muted">—</span>`;
+const deleteEmailButton = (e) => `<button class="icon danger" data-action="delete-email" data-id="${e.id}" data-name="${esc(e.subject || "(no subject)")}" title="Delete this email and its extracted data">🗑</button>`;
+
 const SELECTION = {
   selected: ["Selected", "ok"],
   rejected: ["Rejected", ""],
@@ -348,6 +458,8 @@ function activityPanel(all, pubsubState, filter) {
     const s = senderName(e.sender);
     const reason = e.selection === "rejected" && (e.classification_reason || e.stage_detail);
     return `<tr class="${ACTIVE_STAGES.includes(e.stage) ? "live" : ""}">
+      <td class="sel-col">${selBox("emails", e.id)}</td>
+      <td class="nowrap">${serials(e.documents)}</td>
       <td class="nowrap"><div>${esc(ago(e.received_at))}</div><div class="muted" style="font-size:12px">${esc(fmtTime(e.received_at))}</div>${timing(e)}</td>
       <td><div><b>${esc(e.subject || "(no subject)")}</b></div><div class="muted" style="font-size:12px">${esc(s.name)}${e.attachments.length ? " · 📎 " + esc(e.attachments.join(", ")) : ""}</div></td>
       <td>${selectionBadge(e.selection)}</td>
@@ -356,6 +468,7 @@ function activityPanel(all, pubsubState, filter) {
           : ACTIVE_STAGES.includes(e.stage) && e.stage_detail ? `<div class="muted" style="font-size:12px;margin-top:4px">${esc(e.stage_detail)}</div>`
           : reason ? `<div class="muted" style="font-size:12px;margin-top:4px">Why: ${esc(reason)}</div>` : ""}</td>
       <td>${e.documents.map(docSummary).join("") || `<span class="muted">—</span>`}</td>
+      <td>${deleteEmailButton(e)}</td>
     </tr>`;
   }).join("");
   return `<div class="panel"><h2>${listening ? `<span class="pulse"></span>` : ""}Incoming emails
@@ -363,7 +476,7 @@ function activityPanel(all, pubsubState, filter) {
     <div class="panel-body" style="padding-bottom:0"><div class="chips">${tabs.map(([v, l, n]) =>
       `<a class="chip ${(filter || "") === v ? "active" : ""}" href="#overview${v ? "/" + v : ""}">${esc(l)} <span>${n}</span></a>`).join("")}</div></div>
     ${list.length ? `<div class="table-wrap activity-scroll"><table>
-      <thead><tr><th>Received</th><th>Email</th><th>Status</th><th>Progress</th><th>Result</th></tr></thead>
+      <thead><tr><th class="sel-col">${selAll("emails")}</th><th>#</th><th>Received</th><th>Email</th><th>Status</th><th>Progress</th><th>Result</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div>`
       : `<div class="empty-state">${filter ? "No emails here." : "No emails yet. Send one with a PDF or Excel attachment and it shows up here as it's processed."}</div>`}
   </div>`;
@@ -405,23 +518,27 @@ const views = {
     const rows = emails.map((e) => {
       const s = senderName(e.sender);
       return `<tr class="click" data-href="${e.invoices[0] ? "#invoice/" + e.invoices[0].id : ""}">
+        <td class="sel-col">${selBox("emails", e.id)}</td>
+        <td class="nowrap">${serials(e.invoices)}</td>
         <td class="nowrap">${esc(fmtTime(e.received_at))}</td>
         <td><div>${esc(s.name)}</div><div class="muted mono">${esc(s.addr)}</div></td>
         <td>${esc(e.subject)}</td>
         <td>${verdictBadge(e.classification)}${e.bank_name ? ` <b>${esc(e.bank_name)}</b>` : ""}${e.classification_reason ? `<div class="muted" style="font-size:12px">${esc(e.classification_reason)}</div>` : ""}</td>
         <td>${e.invoices.map((i) => `<div><a href="#invoice/${i.id}">${esc(i.pdf_filename.replace(/^[^_]+_/, ""))}</a></div><div>${statusBadge(i.status)} <span class="badge">${esc(i.bank_code)}</span></div>`).join("") || `<span class="muted">—</span>`}</td>
+        <td>${deleteEmailButton(e)}</td>
       </tr>`;
     }).join("");
-    return pageHeader("Emails", "Every inbox email with a PDF / Excel attachment. The LLM decides whether it's bank-related; only those go on to WhatsApp.", syncButton) + `
+    return pageHeader("Emails", "Every inbox email with a PDF / Excel attachment. The LLM decides whether it's bank-related; only those go on to WhatsApp.",
+      syncButton + (emails.length ? clearButton("emails", "Delete all emails") : "")) + `
       <div class="panel">${emails.length ? `<div class="table-wrap"><table>
-        <thead><tr><th>Received</th><th>From</th><th>Subject</th><th>LLM verdict</th><th>File / status</th></tr></thead>
+        <thead><tr><th class="sel-col">${selAll("emails")}</th><th>#</th><th>Received</th><th>From</th><th>Subject</th><th>LLM verdict</th><th>File / status</th><th></th></tr></thead>
         <tbody>${rows}</tbody></table></div>` : `<div class="empty-state">No emails fetched yet. New inbox emails with a PDF attachment will show up here.</div>`}
       </div>`;
   },
 
   async invoices() {
     const list = await api("/invoices");
-    return pageHeader("Extracted data", "What was read from each PDF attachment", syncButton) +
+    return pageHeader("Extracted data", "What was read from each PDF attachment", syncButton + (list.length ? clearButton("extracted", "Delete all extracted data") : "")) +
       `<div class="panel">${list.length ? invoiceTable(list) : `<div class="empty-state">Nothing extracted yet.</div>`}</div>`;
   },
 
@@ -593,6 +710,10 @@ const views = {
       <td>${b.password_env ? `<span class="badge ${b.password_set ? "ok" : "bad"}">${b.password_set ? "set" : "missing"}</span> <span class="mono muted">${esc(b.password_env)}</span>` : `<span class="muted">none</span>`}</td></tr>`).join("");
     const g = s.gmail;
     return pageHeader("Settings", "Read-only view of the current configuration. Edit <span class=\"mono\">.env</span> and <span class=\"mono\">app/bank_registry.py</span> to change it.") + `
+      <div class="panel"><h2>Delete data</h2><div class="panel-body" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+        ${clearButton("everything", "Delete everything")}
+        <span class="muted" style="font-size:13px">Removes every email, extracted file, statement row, WhatsApp message and generated stock report from the dashboard and the server. Gmail, the Google Sheet, the report formats and the settings are not touched.</span>
+      </div></div>
       <div class="panel"><h2>Banks</h2>${s.banks.length ? `<div class="table-wrap"><table>
         <thead><tr><th>Bank</th><th>Matches sender</th><th>Parser</th><th>PDF password</th></tr></thead><tbody>${banks}</tbody></table></div>`
         : `<div class="empty-state">No banks configured. Every email will be stored as "Unknown bank".</div>`}</div>
@@ -636,9 +757,9 @@ function txnTable(list, { showPdf }) {
 
 function invoiceTable(list) {
   return `<div class="table-wrap"><table>
-    <thead><tr><th>#</th><th>Fetched</th><th>Bank</th><th>PDF</th><th>Date</th><th class="num">Amount</th><th>Reference</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th class="sel-col">${selAll("invoices")}</th><th>#</th><th>Fetched</th><th>Bank</th><th>PDF</th><th>Date</th><th class="num">Amount</th><th>Reference</th><th>Status</th><th></th></tr></thead>
     <tbody>${list.map((i) => `<tr class="click" data-href="#invoice/${i.id}">
-      <td>${i.id}</td><td class="nowrap">${esc(fmtTime(i.created_at))}</td>
+      <td class="sel-col">${selBox("invoices", i.id)}</td><td>${i.id}</td><td class="nowrap">${esc(fmtTime(i.created_at))}</td>
       <td>${esc(i.bank_name)}</td>
       <td class="ellipsis" title="${esc(i.pdf_filename)}">${esc(i.pdf_filename.replace(/^[^_]+_/, ""))}</td>
       <td class="nowrap">${esc(i.txn_date || "—")}</td><td class="num">${i.transaction_counts ? `${i.transaction_counts.total} txns` : esc(i.amount || "—")}</td>
@@ -681,6 +802,7 @@ async function render({ quiet = false } = {}) {
       const inner = $(".activity-scroll")?.scrollTop || 0;
       main.innerHTML = html;
       fitActivityRows();
+      applySelection();
       if (quiet) {
         window.scrollTo(0, scrollY);
         const box = $(".activity-scroll");
@@ -709,7 +831,7 @@ async function refreshSidebar() {
 
 document.addEventListener("click", async (ev) => {
   const row = ev.target.closest("tr[data-href]");
-  if (row && row.dataset.href && !ev.target.closest("a, button")) { location.hash = row.dataset.href; return; }
+  if (row && row.dataset.href && !ev.target.closest("a, button, input, .sel-col")) { location.hash = row.dataset.href; return; }
   const btn = ev.target.closest("button[data-action]");
   if (!btn) return;
   if (btn.dataset.action === "back") {
@@ -717,18 +839,44 @@ document.addEventListener("click", async (ev) => {
     if (navigatedInApp) history.back(); else location.hash = "#overview";
     return;
   }
-  if (btn.dataset.action === "delete" && !confirm(
-    `Delete "${btn.dataset.name}"?
-
-Its extracted data and statement rows are removed from the dashboard and the file is deleted from disk. Rows already saved to the Google Sheet stay there.`)) return;
-  if (btn.dataset.action === "reparse" && btn.dataset.status === "CONFIRMED" && !confirm(
-    `This document is already saved to the Google Sheet.
-
-It will be read again and a new WhatsApp prompt sent. Answering YES again adds it to the Sheet a second time (and sends the stock report).`)) return;
-  if (btn.dataset.action === "format-remove" && !confirm(
-    `Remove "${btn.dataset.name}"?
-
-Reports for these customers will use another format afterwards. The Excel file is deleted from the server (download it first if you need it).`)) return;
+  const keepNote = `<div class="keep">Gmail and rows already saved to the Google Sheet are not touched.</div>`;
+  if (btn.dataset.action === "delete" && !(await askDialog({
+    title: "Delete this file?",
+    body: `<p><b>${esc(btn.dataset.name)}</b></p><p>Its extracted data and statement rows are removed from the dashboard and the file is deleted from disk.</p>${keepNote}`,
+  }))) return;
+  if (btn.dataset.action === "delete-email" && !(await askDialog({
+    title: "Delete this email?",
+    body: `<p><b>${esc(btn.dataset.name)}</b></p><p>The email and everything read from it (extracted data, statement rows, the file on disk) are removed from the dashboard.</p>${keepNote}`,
+  }))) return;
+  let clearConfirm = "";
+  if (btn.dataset.action === "clear") {
+    const what = { emails: ["Delete all emails?", "<b>every email</b> and everything read from them."],
+      extracted: ["Delete all extracted data?", "<b>every extracted file</b> (records, statement rows, the files on disk). The emails stay in the list."],
+      everything: ["Delete everything?", "<b>all emails, extracted data, statement rows, WhatsApp messages and generated stock reports</b>."] }[btn.dataset.scope];
+    if (!(await askDialog({
+      title: what[0], typeWord: "DELETE", confirmLabel: "Delete",
+      body: `<p>This removes ${what[1]}</p><p>It cannot be undone.</p><div class="keep">Gmail, the Google Sheet, the report formats and the settings are not touched.</div>`,
+    }))) return;
+    clearConfirm = "DELETE";
+  }
+  if (btn.dataset.action === "delete-selected") {
+    const ne = sel.emails.size, ni = sel.invoices.size;
+    const count = [ne && `${ne} email${ne > 1 ? "s" : ""}`, ni && `${ni} file${ni > 1 ? "s" : ""}`].filter(Boolean);
+    const lines = [ne && `<b>${ne} email${ne > 1 ? "s" : ""}</b> and everything read from ${ne > 1 ? "them" : "it"}`, ni && `<b>${ni} extracted file${ni > 1 ? "s" : ""}</b>`].filter(Boolean);
+    if (!(await askDialog({
+      title: `Delete ${count.join(" and ")}?`, confirmLabel: "Delete selected",
+      body: `<p>This removes ${lines.join(" and ")} from the dashboard.</p><p>It cannot be undone.</p>${keepNote}`,
+    }))) return;
+  }
+  if (btn.dataset.action === "clear-selection") { sel.emails.clear(); sel.invoices.clear(); applySelection(); return; }
+  if (btn.dataset.action === "reparse" && btn.dataset.status === "CONFIRMED" && !(await askDialog({
+    title: "Read this document again?", confirmLabel: "Read again", danger: false,
+    body: `<p>This document is already saved to the Google Sheet.</p><p>It will be read again and a new WhatsApp prompt sent. Answering YES again adds it to the Sheet a second time (and sends the stock report).</p>`,
+  }))) return;
+  if (btn.dataset.action === "format-remove" && !(await askDialog({
+    title: "Remove this report format?", confirmLabel: "Remove",
+    body: `<p><b>${esc(btn.dataset.name)}</b></p><p>Reports for these customers will use another format afterwards. The Excel file is deleted from the server (download it first if you need it).</p>`,
+  }))) return;
   btn.disabled = true;
   try {
     if (btn.dataset.action === "format-remove") {
@@ -756,6 +904,18 @@ Reports for these customers will use another format afterwards. The Excel file i
       delete contentCache[btn.dataset.id];
       toast("Deleted");
       if (location.hash.startsWith("#invoice/")) { location.hash = "#invoices"; return; }
+    } else if (btn.dataset.action === "delete-selected") {
+      const r = await api("/data/delete", { method: "POST", body: { emails: [...sel.emails].map(Number), invoices: [...sel.invoices].map(Number) } });
+      sel.emails.clear(); sel.invoices.clear();
+      Object.keys(contentCache).forEach((k) => delete contentCache[k]);
+      toast(`Deleted ${r.emails} email${r.emails === 1 ? "" : "s"} and ${r.invoices} file${r.invoices === 1 ? "" : "s"}`);
+    } else if (btn.dataset.action === "delete-email") {
+      await api(`/emails/${btn.dataset.id}`, { method: "DELETE" });
+      toast("Email deleted");
+    } else if (btn.dataset.action === "clear") {
+      const r = await api("/data/clear", { method: "POST", body: { scope: btn.dataset.scope, confirm: clearConfirm } });
+      Object.keys(contentCache).forEach((k) => delete contentCache[k]);
+      toast(`Deleted: ${r.emails} emails, ${r.invoices} extracted files${r.messages ? `, ${r.messages} WhatsApp messages` : ""}`);
     } else if (btn.dataset.action === "resend") {
       const r = await api(`/invoices/${btn.dataset.id}/resend`, { method: "POST" });
       toast(r.status === "SEND_FAILED" ? "Send failed. See the conversation below." : "Sent on WhatsApp");
@@ -815,7 +975,7 @@ document.addEventListener("submit", async (ev) => {
 
 // False until the first in-app navigation: Back then has a page of ours to return to.
 let navigatedInApp = false;
-window.addEventListener("hashchange", () => { navigatedInApp = true; render(); });
+window.addEventListener("hashchange", () => { navigatedInApp = true; sel.emails.clear(); sel.invoices.clear(); render(); });
 render();
 refreshSidebar();
 // Live-ish: pick up new emails, replies and delivery ticks without a manual reload.

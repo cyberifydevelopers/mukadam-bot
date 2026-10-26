@@ -8,6 +8,7 @@ not bind it to a public interface without putting auth in front.
 import json
 import logging
 import os
+import shutil
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -353,13 +354,10 @@ def list_transactions(status: str | None = None, db: Session = Depends(get_db)):
     return [_txn_json(t) for t in q.order_by(StatementTransaction.id.desc()).limit(1000)]
 
 
-@router.delete("/invoices/{invoice_id}")
-def delete_invoice(invoice_id: int, db: Session = Depends(get_db)):
-    """Deletes an extracted file: its record, its statement transactions and
-    the file on disk. The WhatsApp message log is kept (unlinked), and rows
-    already saved to the Google Sheet are not touched. The email itself stays
-    marked as processed, so it isn't fetched and extracted again."""
-    record = _get_invoice(db, invoice_id)
+def _remove_invoice(db: Session, record: InvoiceRecord) -> str:
+    """Deletes one extracted file's records (the invoice and its statement
+    transactions) and unlinks its WhatsApp messages; returns the file's path
+    for the caller to remove once the change is committed."""
     txn_ids = [t.id for t in record.transactions]
     q = db.query(WhatsAppMessage).filter(WhatsAppMessage.invoice_id == record.id)
     if txn_ids:
@@ -371,14 +369,132 @@ def delete_invoice(invoice_id: int, db: Session = Depends(get_db)):
         db.delete(txn)
     path = _pdf_path(record)
     db.delete(record)
-    db.commit()
+    return path
+
+
+def _remove_file(path: str) -> None:
     try:
         os.remove(path)
     except FileNotFoundError:
         pass
     except OSError as exc:
-        logger.warning("Deleted invoice %s but couldn't remove %s: %s", invoice_id, path, exc)
+        logger.warning("Couldn't remove %s: %s", path, exc)
+
+
+def _empty_folder(folder: str) -> int:
+    """Removes the files (and sub-folders) inside `folder`, but not the folder
+    itself, a .gitkeep, or hidden entries (e.g. LibreOffice's profile)."""
+    removed = 0
+    if not os.path.isdir(folder):
+        return 0
+    for name in os.listdir(folder):
+        if name.startswith("."):
+            continue
+        path = os.path.join(folder, name)
+        try:
+            shutil.rmtree(path) if os.path.isdir(path) else os.remove(path)
+            removed += 1
+        except OSError as exc:
+            logger.warning("Couldn't remove %s: %s", path, exc)
+    return removed
+
+
+@router.delete("/invoices/{invoice_id}")
+def delete_invoice(invoice_id: int, db: Session = Depends(get_db)):
+    """Deletes an extracted file: its record, its statement transactions and
+    the file on disk. The WhatsApp message log is kept (unlinked), and rows
+    already saved to the Google Sheet are not touched. The email itself stays
+    marked as processed, so it isn't fetched and extracted again."""
+    record = _get_invoice(db, invoice_id)
+    path = _remove_invoice(db, record)
+    db.commit()
+    _remove_file(path)
     return {"deleted": invoice_id}
+
+
+@router.delete("/emails/{email_id}")
+def delete_email(email_id: int, db: Session = Depends(get_db)):
+    """Deletes an email from the dashboard together with everything read from
+    it. Gmail is not touched, and since the sync only picks up mail newer than
+    its cursor, the email isn't fetched again."""
+    email = db.get(ProcessedEmail, email_id)
+    if email is None:
+        raise HTTPException(404, "Email not found")
+    paths = [_remove_invoice(db, record) for record in list(email.invoices)]
+    db.delete(email)
+    db.commit()
+    for path in paths:
+        _remove_file(path)
+    return {"deleted": email_id, "files": len(paths)}
+
+
+class DeleteSelectedRequest(BaseModel):
+    emails: list[int] = []
+    invoices: list[int] = []
+
+
+@router.post("/data/delete")
+def delete_selected(body: DeleteSelectedRequest, db: Session = Depends(get_db)):
+    """Deletes the emails and extracted files ticked on the dashboard. An email
+    goes with everything read from it; ids already gone are skipped."""
+    paths: list[str] = []
+    emails = 0
+    for email_id in dict.fromkeys(body.emails):
+        email = db.get(ProcessedEmail, email_id)
+        if email is None:
+            continue
+        paths += [_remove_invoice(db, record) for record in list(email.invoices)]
+        db.delete(email)
+        emails += 1
+    db.flush()  # the invoices of deleted emails are gone before the ticked files are looked up
+    invoices = len(paths)
+    for invoice_id in dict.fromkeys(body.invoices):
+        record = db.get(InvoiceRecord, invoice_id)
+        if record is None:
+            continue
+        paths.append(_remove_invoice(db, record))
+        invoices += 1
+    db.commit()
+    for path in paths:
+        _remove_file(path)
+    return {"emails": emails, "invoices": invoices}
+
+
+class ClearRequest(BaseModel):
+    scope: str  # "emails" / "extracted" / "everything"
+    confirm: str = ""
+
+
+@router.post("/data/clear")
+def clear_data(body: ClearRequest, db: Session = Depends(get_db)):
+    """Bulk delete from the dashboard (Gmail, the Google Sheet, the report formats and
+    the settings are never touched):
+
+    extracted   every extracted file (records, statement rows, the files on disk);
+                the emails stay, listed as "file deleted"
+    emails      every email and everything read from it
+    everything  all of the above, the WhatsApp message log, and the stock reports made
+
+    The sync cursor stays, so deleted emails are not fetched again."""
+    if body.scope not in ("emails", "extracted", "everything"):
+        raise HTTPException(422, "scope must be emails, extracted or everything")
+    if body.confirm != "DELETE":
+        raise HTTPException(422, "Type DELETE to confirm")
+    paths = [_remove_invoice(db, record) for record in db.query(InvoiceRecord).all()]
+    emails = 0
+    if body.scope in ("emails", "everything"):
+        emails = db.query(ProcessedEmail).delete(synchronize_session=False)
+    messages = 0
+    if body.scope == "everything":
+        messages = db.query(WhatsAppMessage).delete(synchronize_session=False)
+    db.commit()
+    for path in paths:
+        _remove_file(path)
+    leftovers = 0
+    if body.scope == "everything":
+        leftovers = _empty_folder(settings.pdf_storage_dir) + _empty_folder(settings.stock_report_dir)
+    logger.warning("Dashboard clear (%s): %d files, %d emails, %d messages, %d other files", body.scope, len(paths), emails, messages, leftovers)
+    return {"scope": body.scope, "invoices": len(paths), "emails": emails, "messages": messages}
 
 
 @router.get("/activity")
