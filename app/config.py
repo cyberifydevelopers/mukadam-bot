@@ -91,6 +91,10 @@ class Settings(BaseSettings):
     # seeded from app/stock_report_templates/ the first time.
     stock_template_dir: str = "./data/stock_templates"
     libreoffice_path: str = ""
+    # Rupees per US dollar. The approved reports are in rupees, so an import
+    # (an invoice in USD) is shown the same way: rate × this, per metric ton.
+    # 0 = leave the invoice's own currency and units as they are.
+    usd_pkr_rate: float = 0
 
     # App/db
     database_url: str = "sqlite:///./data/mukadam_bot.db"

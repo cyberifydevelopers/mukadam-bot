@@ -17,7 +17,13 @@ stock_report.py) names the template, the output files and what to write:
                                   old stock lines are wiped before ours are written
     values                        [cell, number | text | "=formula", (cell to copy the number format from)]
                                   — top-left cell of a merged block
-    date_cells, date              cells whose "dd-mm-yyyy" gets today's date (a bare "Dated:" gets it appended)
+    date_cells, date              cells whose "dd-mm-yyyy" gets today's date (a bare "Dated:" gets it appended);
+                                  only the date's characters change, so the cell's bold / size stay
+    text_style                    [target cell, source cell]: the target's text gets the character look (font,
+                                  size, bold…) of the first run in the source cell — the sample's own stock line
+    rich                          {cell, location, customer}: the sample's paragraph keeps its look — the
+                                  words Godown / location / customer / Commander International get the same
+                                  bold, underline and size the sample gives them
     replacements                  [cell, regex, replacement] applied to a label (e.g. Rs → USD)
 """
 
@@ -130,6 +136,111 @@ def _is_formula(cell):
     return cell.Type == FORMULA
 
 
+_CHAR_PROPS = ("CharFontName", "CharHeight", "CharWeight", "CharPosture", "CharUnderline", "CharColor")
+
+
+def _portions(cell):
+    """The cell's text as [(text, {character properties})], one entry per differently-formatted run."""
+    out = []
+    for paragraph in cell.createEnumeration():
+        for portion in paragraph.createEnumeration():
+            out.append((portion.String, {name: portion.getPropertyValue(name) for name in _CHAR_PROPS}))
+    return out
+
+
+def _style(cell, start, length, props):
+    if length <= 0 or not props:
+        return
+    cursor = cell.createTextCursor()
+    cursor.gotoStart(False)
+    cursor.goRight(start, False)
+    cursor.goRight(length, True)
+    for name, value in props.items():
+        cursor.setPropertyValue(name, value)
+
+
+def _restyle_paragraph(cell, snapshot, location, customer):
+    """Gives the freshly written paragraph the sample's own look. The sample's runs are told apart by
+    their text: the one with 'godown', the one with the customer ('M/S ...'), the one naming
+    Commander International, and the bold one after 'situated' (the location)."""
+    if len(snapshot) < 2:
+        return  # a plain one-style paragraph: nothing to copy
+    text = cell.getString()
+    _style(cell, 0, len(text), snapshot[0][1])
+
+    def run(test):
+        return next((props for t, props in snapshot if t.strip() and test(t.lower())), None)
+
+    godown = run(lambda t: "godown" in t)
+    commander = run(lambda t: "commander" in t)
+    customer_run = run(lambda t: t.strip().startswith("m/s") and "commander" not in t)
+    location_run = None
+    for i, (t, props) in enumerate(snapshot):
+        if "situated" in t.lower() and i + 1 < len(snapshot):
+            location_run = snapshot[i + 1][1]
+            if not snapshot[i + 1][0].strip():
+                location_run = None
+            break
+    if location_run is None:
+        location_run = next((props for t, props in snapshot[1:] if t.strip() and props["CharWeight"] > 100
+                             and "godown" not in t.lower() and "commander" not in t.lower()
+                             and not t.strip().lower().startswith("m/s")), None)
+
+    lower = text.lower()
+    m = re.search(r"godowns?", lower)
+    if godown and m:
+        _style(cell, m.start(), m.end() - m.start(), godown)
+    if location_run and location and location != "—":
+        i = text.find(location, m.end() if m else 0)
+        if i >= 0:
+            _style(cell, i, len(location), location_run)
+    if customer_run and customer:
+        i = text.find(customer)
+        if i >= 0:
+            end = i + len(customer)
+            if text[max(i - 4, 0):i].lower() == "m/s ":
+                i -= 4  # the sample's run starts at "M/S"
+            _style(cell, i, end - i, customer_run)
+    if commander:
+        i = lower.find("m/s commander")
+        if i < 0:
+            i = lower.find("commander")
+        end = lower.find("ltd", i)
+        if i >= 0 and end >= 0:
+            _style(cell, i, end + 3 - i, commander)
+
+
+def _row_heights(sheet):
+    last = sheet.createCursor()
+    last.gotoEndOfUsedArea(False)
+    return [sheet.Rows.getByIndex(r).Height for r in range(last.RangeAddress.EndRow + 1)]
+
+
+def _keep_row_heights(sheet, heights):
+    """LibreOffice measures a row again whenever its text changes, which can shrink a row the sample made
+    taller. Every row goes back to at least the sample's height (more only when our text needs it)."""
+    for r, height in enumerate(heights):
+        row = sheet.Rows.getByIndex(r)
+        if row.Height < height:
+            row.Height = height
+
+
+def _set_date(cell, date):
+    """Replaces only the date's characters (or appends it to a bare 'Dated:'), so the cell keeps its
+    own bold / size."""
+    text = cell.getString()
+    cursor = cell.createTextCursor()
+    cursor.gotoStart(False)
+    m = _DATE.search(text)
+    if m:
+        cursor.goRight(m.start(), False)
+        cursor.goRight(m.end() - m.start(), True)
+        cursor.setString(date)
+    else:
+        cursor.gotoEnd(False)
+        cursor.setString(f" {date}")
+
+
 def fill(job):
     proc, desktop = _start_office(job["soffice"], job["profile_url"])
     try:
@@ -145,9 +256,18 @@ def fill(job):
                 _insert_rows(sheet, job)
             for cells in job.get("merges", []):
                 sheet.getCellRangeByName(cells).merge(True)
+            # What the sample looks like, noted before its old stock lines are wiped.
+            heights = _row_heights(sheet)
+            line_looks = {}
+            for _target, source in job.get("text_style", []):
+                if source not in line_looks:
+                    runs = _portions(sheet.getCellRangeByName(source))
+                    line_looks[source] = runs[0][1] if runs else None
             if job.get("clear"):
                 _clear_sample_lines(sheet, job["clear"])
 
+            rich = job.get("rich")
+            snapshot = _portions(sheet.getCellRangeByName(rich["cell"])) if rich else None
             for name, value, *format_from in job["values"]:
                 cell = sheet.getCellRangeByName(name)
                 if isinstance(value, (int, float)):
@@ -161,17 +281,18 @@ def fill(job):
                 if format_from:
                     # The samples' empty lines aren't all formatted alike (e.g. 0.00 vs 0.000).
                     cell.NumberFormat = sheet.getCellRangeByName(format_from[0]).NumberFormat
+            for target, source in job.get("text_style", []):
+                cell = sheet.getCellRangeByName(target)
+                _style(cell, 0, len(cell.getString()), line_looks[source])
+            if rich:
+                _restyle_paragraph(sheet.getCellRangeByName(rich["cell"]), snapshot, rich["location"], rich["customer"])
             for name in job.get("date_cells", []):
-                cell = sheet.getCellRangeByName(name)
-                text = cell.getString()
-                if _DATE.search(text):
-                    cell.setString(_DATE.sub(job["date"], text, count=1))
-                else:
-                    cell.setString(f"{text.rstrip()} {job['date']}")  # "Dated:" with nothing after it
+                _set_date(sheet.getCellRangeByName(name), job["date"])
             for name, pattern, replacement in job.get("replacements", []):
                 cell = sheet.getCellRangeByName(name)
                 cell.setString(re.sub(pattern, replacement, cell.getString()))
 
+            _keep_row_heights(sheet, heights)
             doc.calculateAll()
             doc.storeToURL(uno.systemPathToFileUrl(job["xlsx_out"]), (_prop("FilterName", "Calc MS Excel 2007 XML"),))
             doc.storeToURL(uno.systemPathToFileUrl(job["pdf_out"]), (_prop("FilterName", "calc_pdf_Export"),))

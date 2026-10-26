@@ -72,6 +72,20 @@ def _quantity(value: str | None) -> float | None:
     return float(m[1].replace(",", "")) if m else None
 
 
+_KILOS = {"kg", "kgs", "kilo", "kilos", "kilogram", "kilograms"}
+
+
+def _unit(value: str | None) -> str:
+    """'5600 KGS' → 'kgs'; '' when there is no unit."""
+    m = _QUANTITY.match((value or "").strip())
+    return m[2].lower().rstrip(".") if m else ""
+
+
+def _import_conversion(order: dict) -> bool:
+    """An invoice in USD is shown in rupees per metric ton (like the approved reports) when a rate is set."""
+    return (order.get("currency") or "").strip().upper() == "USD" and settings.usd_pkr_rate > 0
+
+
 def _customer(order: dict) -> str:
     name = (order.get("customer_name") or "").strip()
     return re.sub(r"^m/s\.?\s*", "", name, flags=re.IGNORECASE) or "Customer"
@@ -118,8 +132,9 @@ def build_job(template: Template, order: dict, dated: datetime) -> dict:
     ranges are stretched over them, so the totals take them in. Formulas
     the sample already has are kept (see stock_report_uno.py)."""
     rows = order["rows"]
+    convert = _import_conversion(order)
     slots = template.last_row - template.first_row + 1
-    job: dict = {"values": [], "merges": [], "date_cells": [template.date_cell] if template.date_cell else [], "date": f"{dated:%d-%m-%Y}"}
+    job: dict = {"values": [], "merges": [], "text_style": [], "date_cells": [template.date_cell] if template.date_cell else [], "date": f"{dated:%d-%m-%Y}"}
     if len(rows) > slots:
         added = len(rows) - slots
         job.update(
@@ -154,18 +169,23 @@ def build_job(template: Template, order: dict, dated: datetime) -> dict:
         description = item.get("description") or ""
         column = t.lc_column if t.lc_column and _LC.search(description) else t.description
         put(f"{column}{r}", description)
+        job["text_style"].append([f"{column}{r}", f"{column}{t.first_row}"])  # the sample's own stock-line look
 
         # Quantities: as stated; a movement not stated is 0, and a balance
         # not stated (goods coming in on an L/C) is worked out in the sheet.
+        # A foreign invoice counted in kilos is reported in metric tons (the rate then follows: per ton).
+        per = 1.0
+        if convert and any(_unit(item.get(k)) in _KILOS for k in ("opening_balance", "quantity_received", "quantity_released", "balance_after")):
+            per = 1000.0
         for key, col in (("opening_balance", t.opening), ("quantity_received", t.received), ("quantity_released", t.delivered)):
             if not col:
                 continue
             value = (item.get(key) or "").strip()
             number = _quantity(value) if value else 0.0
-            put(f"{col}{r}", value if number is None else number, f"{col}{t.first_row}")
+            put(f"{col}{r}", value if number is None else number / per, f"{col}{t.first_row}")
         balance = (item.get("balance_after") or "").strip()
         if balance and _quantity(balance) is not None:
-            put(f"{t.balance}{r}", _quantity(balance), f"{t.balance}{t.first_row}")
+            put(f"{t.balance}{r}", _quantity(balance) / per, f"{t.balance}{t.first_row}")
         else:
             terms = "".join(
                 f"{sign}{col}{r}" for sign, col in (("+", t.opening), ("+", t.received), ("-", t.delivered)) if col
@@ -175,6 +195,8 @@ def build_job(template: Template, order: dict, dated: datetime) -> dict:
         # Value = balance on hand × rate; then margin and DP value.
         rate = _quantity(item.get("rate_per_unit"))
         if rate is not None:
+            if convert:
+                rate = round(rate * per * settings.usd_pkr_rate, 2)
             put(f"{t.rate}{r}", rate, f"{t.rate}{t.first_row}")
         divisor = f"/{t.value_divisor}" if t.value_divisor != 1 else ""
         put(f"{t.value}{r}", f"={t.balance}{r}*{t.rate}{r}{divisor}", f"{t.value}{t.first_row}")
@@ -185,18 +207,17 @@ def build_job(template: Template, order: dict, dated: datetime) -> dict:
         elif t.dp and t.margin_pct is not None:
             put(f"{t.dp}{r}", f"={t.value}{r}*{100 - t.margin_pct}/100", f"{t.dp}{t.first_row}")
 
-    text = _fill_in(t.text, location=order.get("pledge_location") or "—", customer=_customer(order))
-    if note := (order.get("reference_note") or "").strip():
-        if t.text != "{location}":
-            text += f" ({note.rstrip('.')}.)"
-    put(t.text_cell, text)
+    # Only the bank-approved sentence goes in — nothing is appended to it — and it keeps the sample's look.
+    location = order.get("pledge_location") or "—"
+    put(t.text_cell, _fill_in(t.text, location=location, customer=_customer(order)))
+    job["rich"] = {"cell": t.text_cell, "location": location, "customer": _customer(order)}
 
     branch = (order.get("bank_branch") or "").strip()
     if t.city_cell and "," in branch:
         put(t.city_cell, _fill_in(t.city_text, city=branch.rsplit(",", 1)[1].strip().rstrip(".")))
 
     currency = (order.get("currency") or "").strip().upper()
-    if currency and currency not in ("PKR", "RS", "RS."):
+    if currency and currency not in ("PKR", "RS", "RS.") and not convert:
         job["replacements"] = [
             [_shifted(cell, t.last_row, max(len(rows) - slots, 0)), r"\bRs\b\.?", currency] for cell in t.currency_cells
         ]

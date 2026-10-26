@@ -538,13 +538,15 @@ def _send_confirmation(record: InvoiceRecord) -> None:
         title = f"*Enclosed documents ({len(documents)})*\n\n" if n == 1 else ""
         details = "\n".join(f"     {d.get('label')}: {d.get('value')}" for d in doc["details"])
         blocks.append(f"{title}_{doc['document']}_\n{details}")
+    has_stock = stock_report.delivery_order(record) is not None
     footer = "\n".join([
         "*Save to the Google Sheet?*",
         # Delivery orders get their stock report back after a YES (app/routers/openwa_webhook.py).
         "Reply YES to save and get the stock report, or NO to skip."
-        if stock_report.delivery_order(record) and settings.whatsapp_provider == "openwa"
+        if has_stock and settings.whatsapp_provider == "openwa"
         else "Reply YES to save, or NO to skip.",
         f"(With several waiting, reply YES {record.id} or NO {record.id}.)",
+        *([] if has_stock else ["", "📌 *Note: No stock related data found in this file / mail.*"]),
     ])
     messages = _pack([*blocks, footer])
     if len(messages) > 1:
