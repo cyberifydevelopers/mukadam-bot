@@ -96,6 +96,14 @@ class Settings(BaseSettings):
     # 0 = leave the invoice's own currency and units as they are.
     usd_pkr_rate: float = 0
 
+    # "View file" link at the end of each WhatsApp prompt (app/services/file_link.py).
+    # PUBLIC_BASE_URL = the app's address (https://…); on Railway its own domain is
+    # used when this is empty. The link is signed with FILE_LINK_SECRET, or
+    # OPENWA_WEBHOOK_SECRET when that's empty; with neither, no link is added.
+    public_base_url: str = ""
+    railway_public_domain: str = ""
+    file_link_secret: str = ""
+
     # App/db
     database_url: str = "sqlite:///./data/mukadam_bot.db"
     pdf_storage_dir: str = "./data/pdfs"

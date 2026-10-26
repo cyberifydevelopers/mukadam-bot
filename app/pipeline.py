@@ -25,7 +25,7 @@ from app.models import GmailSyncState, InvoiceRecord, InvoiceStatus, ProcessedEm
 from app.parsers.base import ExtractedInvoice
 from app.parsers.llm_parser import LlmInvoiceParser, LlmParseError
 from app.parsers.statement_rows import parse_statement
-from app.services import gmail_service, openwa_service, stock_report, whatsapp_service
+from app.services import file_link, gmail_service, openwa_service, stock_report, whatsapp_service
 from app.services.document_reader import Document, read_document
 from app.services.message_log import log_message
 from app.services.pdf_extractor import PdfExtractionError
@@ -424,6 +424,12 @@ def _row_party(txn: StatementTransaction) -> str:
 _TABLE_CHUNK_CHARS = 3300
 
 
+def _view_file_lines(record: InvoiceRecord) -> list[str]:
+    """The last lines of a prompt: a highlighted link to the document it was read from."""
+    url = file_link.url_for(record.id)
+    return ["", f"📎 *View file:* {url}"] if url else []
+
+
 def _send_statement(record: InvoiceRecord) -> None:
     """One WhatsApp message for the whole statement: totals, then a compact
     monospace table (date, +/-amount, party) of the rows awaiting an answer,
@@ -472,6 +478,7 @@ def _send_statement(record: InvoiceRecord) -> None:
         f"*Save all {len(rows)} transactions to the Google Sheet?*",
         "Reply YES to save, or NO to skip.",
         f"(With several waiting, reply YES {record.id} or NO {record.id}.)",
+        *_view_file_lines(record),
     ]
 
     messages = []
@@ -547,6 +554,7 @@ def _send_confirmation(record: InvoiceRecord) -> None:
         else "Reply YES to save, or NO to skip.",
         f"(With several waiting, reply YES {record.id} or NO {record.id}.)",
         *([] if has_stock else ["", "📌 *Note: No stock related data found in this file / mail.*"]),
+        *_view_file_lines(record),
     ])
     messages = _pack([*blocks, footer])
     if len(messages) > 1:
