@@ -180,10 +180,22 @@ _FUNCTION = {
                     "in our custody: a DELIVERY ORDER releasing stock from the godown ('Delivery order "
                     "of stocks/assets', 'kindly take the delivery as per below details'), or an L/C "
                     "endorsement letter whose goods are to be placed in a godown under our muccadam "
-                    "control (goods coming in). null for anything else, e.g. a collection-of-documents "
-                    "notice."
+                    "control (goods coming in). Also the CLIENT'S OWN letter to the bank — on the client's "
+                    "letterhead, 'Request for Pledge Stock Takeover', addressed 'The Manager, <Bank>, "
+                    "<Branch>' — with a table of Opening / Received / Delivered / Closing per stock: fill "
+                    "this too (and addressee_bank). IN and OUT: stock 'Received' / 'to be Received' is "
+                    "coming INTO the godown (quantity_received); 'Delivered' / 'Released' / 'to be "
+                    "Release(d)' is going OUT (quantity_released); a dash or blank means none. null for "
+                    "anything else, e.g. a collection-of-documents notice."
                 ),
                 "properties": {
+                    "addressee_bank": {
+                        "type": ["string", "null"],
+                        "description": (
+                            "Only for the client's own request letter: the bank it is addressed to, as written "
+                            "(e.g. 'Meezan Bank Limited'); null for a letter issued by the bank itself"
+                        ),
+                    },
                     "customer_name": {
                         "type": ["string", "null"],
                         "description": "The client whose stock it is (who pledged it), e.g. 'Canon Foam Industries (PVT) Ltd', as written",
@@ -200,7 +212,9 @@ _FUNCTION = {
                         "type": ["string", "null"],
                         "description": (
                             "The issuing branch followed by its city, from the letterhead or footer "
-                            "address (e.g. 'Zahoor Elahi Road Branch, Lahore') — include the city"
+                            "address (e.g. 'Zahoor Elahi Road Branch, Lahore') — include the city. For the "
+                            "client's own letter, the branch it is addressed to ('Circular Road Branch "
+                            "Bahawalpur' → 'Circular Road Branch, Bahawalpur')"
                         ),
                     },
                     "currency": {
@@ -247,7 +261,7 @@ _FUNCTION = {
                                         "(a delivery order has none)"
                                     ),
                                 },
-                                "opening_balance": {"type": ["string", "null"], "description": "Balance in hand before this delivery"},
+                                "opening_balance": {"type": ["string", "null"], "description": "Balance in hand before this delivery ('Opening')"},
                                 "quantity_received": {
                                     "type": ["string", "null"],
                                     "description": "Quantity coming INTO the godown (an L/C's goods to be placed there); null on a delivery order",
@@ -256,7 +270,7 @@ _FUNCTION = {
                                     "type": ["string", "null"],
                                     "description": "Quantity to be released / delivered OUT of the godown now; null for incoming goods",
                                 },
-                                "balance_after": {"type": ["string", "null"], "description": "Balance after delivery"},
+                                "balance_after": {"type": ["string", "null"], "description": "Balance after delivery ('Closing')"},
                             },
                             "required": [
                                 "description", "opening_balance", "quantity_received", "quantity_released",

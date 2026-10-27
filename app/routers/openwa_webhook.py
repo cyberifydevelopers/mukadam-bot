@@ -202,7 +202,7 @@ def _handle_pdf_request(db: Session, request: openwa_service.PdfRequest) -> dict
             db.commit()
             return {"status": "ok"}
         try:
-            report = stock_report.latest(record) or stock_report.build(record)
+            report = stock_report.build(record, regenerate=True)  # made again, so a corrected format shows
         except Exception as exc:  # noqa: BLE001 — reported to the person asking, not raised
             logger.exception("Stock report for #%s failed", record.id)
             _send_logged(db, request.sender_phone, f"The stock report for #{record.id} couldn't be made: {exc}", record)

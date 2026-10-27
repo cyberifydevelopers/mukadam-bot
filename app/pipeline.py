@@ -163,6 +163,18 @@ def _is_bank(extracted: ExtractedInvoice) -> bool:
     return extracted.extra.get("is_bank_document") is not False and extracted.extra.get("issuer_is_bank") is not False
 
 
+def _accept_takeover_request(extracted: ExtractedInvoice) -> None:
+    """The client's own 'Request for Pledge Stock Takeover' letter to the bank is on the client's letterhead, not
+    the bank's, but it moves pledged stock just as a bank's delivery order does: it is accepted, and the bank
+    it is addressed to is the document's bank."""
+    order = extracted.extra.get("delivery_order")
+    bank = ((order or {}).get("addressee_bank") or "").strip()
+    if order and order.get("rows") and bank:
+        extracted.extra["bank_name"] = extracted.extra.get("bank_name") or bank
+        extracted.extra["is_bank_document"] = True
+        extracted.extra["issuer_is_bank"] = True
+
+
 def _process_one_message(db: Session, message_id: str, notification: tuple[datetime, datetime] | None = None) -> int:
     """`notification` = (published_at, received_at) of the Pub/Sub message
     that triggered this sync, kept on the email for the latency breakdown."""
@@ -304,6 +316,7 @@ def extract_document(db: Session, record: InvoiceRecord, doc: Document | None = 
                 if _is_bank(seen):
                     logger.info("%s: the page images show a bank document the text alone didn't", record.pdf_filename)
                     extracted = seen
+        _accept_takeover_request(extracted)
         _set_bank(record, extracted.extra.get("bank_name"))
         # A bank with a hand-written parser: its fields replace the LLM's
         # (the LLM still decided bank / not bank and which bank).

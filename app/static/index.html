@@ -127,6 +127,50 @@
   .fmt-cols { display: flex; flex-wrap: wrap; gap: 6px; }
   .fmt-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
+  /* Stock Reports */
+  .inv { display: grid; grid-template-columns: minmax(250px, 320px) 1fr; gap: 16px; align-items: start; }
+  .inv-list { max-height: calc(100vh - 210px); overflow: auto; display: none; }
+  .inv-list.active { display: block; animation: inv-in .3s cubic-bezier(.2,.8,.2,1); }
+  @keyframes inv-in { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+  .dd { position: relative; }
+  .dd-btn { display: flex; align-items: center; gap: 10px; min-width: 300px; max-width: 100%; padding: 9px 12px 9px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; color: var(--fg); font: inherit; font-weight: 600; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+  .dd-btn:hover, .dd.open .dd-btn { border-color: var(--accent); }
+  .dd.open .dd-btn { box-shadow: 0 0 0 3px var(--info-bg); }
+  .dd-btn .dd-name { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: opacity .15s; }
+  .dd-count { font-weight: 500; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--neutral-bg); color: var(--muted); }
+  .dd-chev { width: 16px; height: 16px; flex-shrink: 0; transition: transform .22s ease; }
+  .dd.open .dd-chev { transform: rotate(180deg); }
+  .dd-menu { position: absolute; z-index: 15; top: calc(100% + 6px); left: 0; min-width: 100%; width: max-content; max-width: 90vw; padding: 6px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 14px 34px rgba(0,0,0,.22);
+    opacity: 0; transform: translateY(-8px) scale(.97); transform-origin: top left; pointer-events: none; visibility: hidden; transition: opacity .18s ease, transform .18s ease, visibility 0s linear .18s; }
+  .dd.open .dd-menu { opacity: 1; transform: none; pointer-events: auto; visibility: visible; transition-delay: 0s; }
+  .dd-opt { display: flex; align-items: center; justify-content: space-between; gap: 18px; width: 100%; padding: 9px 12px; background: none; border: 0; border-radius: 8px; color: var(--fg); font: inherit; text-align: left; cursor: pointer; transition: background .12s; }
+  .dd-opt:hover { background: var(--info-bg); }
+  .dd-opt.sel { background: var(--info-bg); font-weight: 600; }
+
+  .inv-month { padding: 10px 14px 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .inv-row { display: flex; align-items: stretch; border-top: 1px solid var(--border); }
+  .inv-row.active { background: var(--info-bg); }
+  .inv-pick { flex: 1; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; text-align: left; padding: 9px 14px; background: none; border: 0; color: var(--fg); font: inherit; cursor: pointer; }
+  .inv-pick:hover { background: var(--info-bg); }
+  .inv-del { padding: 0 12px; background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 15px; }
+  .inv-del:hover { color: var(--bad); }
+  .inv-view { position: sticky; top: 16px; }
+  .inv-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .inv-bar .grow { flex: 1; min-width: 160px; font-weight: 600; }
+  #inv-frame { width: 100%; height: calc(100vh - 200px); min-height: 520px; border: 0; background: #fff; display: block; border-radius: 0 0 12px 12px; transition: opacity .3s ease; }
+  #inv-frame.loading { opacity: 0; }
+  /* On a wide screen the Stock Reports page fills the window: the page itself never scrolls, only the list does. */
+  @media (min-width: 801px) {
+    main.fit { height: 100vh; overflow: hidden; display: flex; flex-direction: column; padding-bottom: 20px; }
+    main.fit header.page, main.fit .chips { margin-bottom: 12px; flex-shrink: 0; }
+    main.fit .inv { flex: 1; min-height: 0; }
+    main.fit .inv-list, main.fit .inv-view { height: 100%; max-height: none; margin-bottom: 0; position: static; }
+    main.fit .inv-list { overflow: auto; }
+    main.fit .inv-list:not(.active) { display: none; }
+    main.fit .inv-view { display: flex; flex-direction: column; overflow: hidden; }
+    main.fit #inv-frame { flex: 1; height: auto; min-height: 0; }
+  }
+
   /* WhatsApp chat */
   .chat { background: var(--chat-bg); padding: 16px; display: flex; flex-direction: column; gap: 8px; border-radius: 0 0 12px 12px; max-height: 620px; overflow: auto; }
   .bubble { max-width: 72%; padding: 8px 10px 4px; border-radius: 10px; background: var(--bubble-in); align-self: flex-start; box-shadow: 0 1px 1px rgba(0,0,0,.08); }
@@ -176,6 +220,9 @@
     nav a { border-left: none; border-bottom: 3px solid transparent; padding: 10px 14px; white-space: nowrap; }
     nav a.active { border-bottom-color: var(--accent); }
     .sidebar-foot { display: none; }
+    .inv { grid-template-columns: 1fr; }
+    .inv-list { max-height: 280px; }
+    .inv-view { position: static; }
     main { padding: 16px; }
     .bubble { max-width: 90%; }
   }
@@ -198,6 +245,9 @@
       <a href="#whatsapp" data-tab="whatsapp">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.4 8.4 0 0 1-12.3 7.4L3 21l2.1-5.6A8.4 8.4 0 1 1 21 11.5z"/></svg>
         WhatsApp</a>
+      <a href="#inventory" data-tab="inventory">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/></svg>
+        Stock Reports</a>
       <a href="#formats" data-tab="formats">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
         Report formats</a>
@@ -654,6 +704,45 @@ const views = {
       </div>`;
   },
 
+  // Every stock report the bot has made, kept per firm; one opens in the page, as the Excel sheet looks.
+  async inventory(key) {
+    const { firms } = await api("/inventory");
+    if (!firms.length) return pageHeader("Stock Reports", "Every stock report, firm by firm.") + `<div class="empty-state">No stock reports yet. They appear here as soon as a delivery order or takeover letter is confirmed on WhatsApp.</div>`;
+    const chosen = Math.max(0, firms.findIndex((f) => f.key === decodeURIComponent(key || "")));
+    const options = firms.map((f, i) => `<button class="dd-opt ${i === chosen ? "sel" : ""}" role="option" data-firm="${i}"><span class="dd-name">${esc(f.name)}</span><span class="dd-count">${f.reports.length}</span></button>`).join("");
+    const lists = firms.map((f, i) => {
+      let month = "", rows = "";
+      for (const r of f.reports) {
+        if (r.month !== month) {
+          month = r.month;
+          const [y, m] = month.split("-");
+          rows += `<div class="inv-month">${esc(new Date(+y, +m - 1).toLocaleString(undefined, { month: "long", year: "numeric" }))}</div>`;
+        }
+        rows += `<div class="inv-row" data-ref="${esc(r.ref)}">
+          <button class="inv-pick" data-action="inv-open" data-ref="${esc(r.ref)}" data-name="${esc(r.name)}" data-xlsx="${r.xlsx ? 1 : 0}"><b>${esc(r.date)}</b><span class="muted">${r.record ? "#" + esc(r.record) : ""}</span></button>
+          <button class="inv-del" data-action="inv-delete" data-ref="${esc(r.ref)}" data-name="${esc(r.name)}" title="Delete this report">✕</button></div>`;
+      }
+      return `<div class="panel inv-list ${i === chosen ? "active" : ""}" data-firm="${i}" data-key="${esc(f.key)}" data-first="${esc(f.reports[0].ref)}"><h2>${esc(f.name)} <span class="right">${f.reports.length} report${f.reports.length === 1 ? "" : "s"}</span></h2>${rows}</div>`;
+    }).join("");
+    return pageHeader("Stock Reports", "Every stock report, firm by firm and date by date. Each report carries on from the one before it; click one to open it here.") + `
+      <div class="chips" style="align-items:center">
+        <div class="dd" id="inv-dd">
+          <button class="dd-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
+            <span class="dd-name" id="dd-label">${esc(firms[chosen].name)}</span><span class="dd-count" id="dd-count">${firms[chosen].reports.length}</span>
+            <svg class="dd-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 9 6 6 6-6"/></svg></button>
+          <div class="dd-menu" role="listbox">${options}</div>
+        </div>
+        <span class="muted">${firms.length} firm${firms.length === 1 ? "" : "s"}</span>
+      </div>
+      <div class="inv">${lists}
+        <div class="panel inv-view">
+          <div class="inv-bar"><div class="grow" id="inv-title">Pick a date</div>
+            <a class="btn" id="inv-xlsx" hidden>Download Excel</a><a class="btn" id="inv-pdf" hidden>Download PDF</a><a class="btn" id="inv-tab" target="_blank" rel="noopener" hidden>Open in new tab ↗</a></div>
+          <iframe id="inv-frame" title="Stock report"></iframe>
+        </div>
+      </div>`;
+  },
+
   async formats() {
     const { templates } = await api("/stock-templates");
     const cards = templates.map((t) => {
@@ -783,6 +872,64 @@ function fitActivityRows() {
 }
 window.addEventListener("resize", fitActivityRows);
 
+/* ---------- Stock Reports: open a report in the page ---------- */
+const refUrl = (ref) => "/api/inventory/file/" + ref.split("/").map(encodeURIComponent).join("/");
+function openReport(ref, name, xlsx = true) {
+  const frame = $("#inv-frame");
+  if (!frame) return;
+  frame.classList.add("loading");
+  frame.onload = () => frame.classList.remove("loading");
+  setTimeout(() => frame.classList.remove("loading"), 1500);  // a PDF viewer may not fire load
+  frame.src = refUrl(ref) + ".pdf";
+  $("#inv-title").textContent = name;
+  const links = { "#inv-xlsx": [refUrl(ref) + ".xlsx", xlsx], "#inv-pdf": [refUrl(ref) + ".pdf?download=true", true], "#inv-tab": [refUrl(ref) + ".pdf", true] };
+  for (const [sel, [href, show]] of Object.entries(links)) { const a = $(sel); a.href = href; a.hidden = !show; }
+  document.querySelectorAll(".inv-row").forEach((row) => row.classList.toggle("active", row.dataset.ref === ref));
+}
+function openFirstReport() {
+  const list = $(".inv-list.active");
+  const first = list && list.querySelector(`.inv-pick[data-ref="${CSS.escape(list.dataset.first)}"]`);
+  if (first) openReport(first.dataset.ref, first.dataset.name, first.dataset.xlsx === "1");
+}
+
+// Choosing a firm in the drop-down: its list slides in and its newest report opens, without reloading the page.
+function switchFirm(index) {
+  const lists = document.querySelectorAll(".inv-list");
+  const target = lists[index];
+  if (!target || target.classList.contains("active")) return;
+  lists.forEach((l) => l.classList.remove("active"));
+  void target.offsetWidth;  // restart the slide-in animation
+  target.classList.add("active");
+  target.scrollTop = 0;
+  const options = document.querySelectorAll(".dd-opt");
+  options.forEach((o, i) => o.classList.toggle("sel", i === index));
+  const label = $("#dd-label");
+  label.style.opacity = 0;
+  setTimeout(() => {
+    label.textContent = options[index].querySelector(".dd-name").textContent;
+    $("#dd-count").textContent = options[index].querySelector(".dd-count").textContent;
+    label.style.opacity = 1;
+  }, 110);
+  history.replaceState(null, "", "#inventory/" + encodeURIComponent(target.dataset.key));
+  openFirstReport();
+}
+
+const closeDropdown = () => {
+  const dd = $("#inv-dd");
+  if (dd) { dd.classList.remove("open"); $(".dd-btn", dd).setAttribute("aria-expanded", "false"); }
+};
+document.addEventListener("click", (ev) => {
+  const dd = $("#inv-dd");
+  if (!dd) return;
+  const option = ev.target.closest(".dd-opt");
+  if (option) { switchFirm(+option.dataset.firm); closeDropdown(); return; }
+  if (ev.target.closest(".dd-btn")) {
+    const open = dd.classList.toggle("open");
+    $(".dd-btn", dd).setAttribute("aria-expanded", String(open));
+  } else closeDropdown();
+});
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeDropdown(); });
+
 /* ---------- Router, sidebar status, actions ---------- */
 
 let currentRoute = "";
@@ -793,6 +940,7 @@ async function render({ quiet = false } = {}) {
   const navTab = view === "invoice" ? "invoices" : view;
   document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.tab === navTab));
   const route = hash;
+  main.classList.toggle("fit", view === "inventory");
   if (!quiet && route !== currentRoute) main.innerHTML = `<div class="empty-state">Loading…</div>`;
   try {
     const html = await views[view](id);
@@ -803,6 +951,7 @@ async function render({ quiet = false } = {}) {
       main.innerHTML = html;
       fitActivityRows();
       applySelection();
+      openFirstReport();
       if (quiet) {
         window.scrollTo(0, scrollY);
         const box = $(".activity-scroll");
@@ -839,6 +988,11 @@ document.addEventListener("click", async (ev) => {
     if (navigatedInApp) history.back(); else location.hash = "#overview";
     return;
   }
+  if (btn.dataset.action === "inv-open") { openReport(btn.dataset.ref, btn.dataset.name, btn.dataset.xlsx === "1"); return; }
+  if (btn.dataset.action === "inv-delete" && !(await askDialog({
+    title: "Delete this report?", confirmLabel: "Delete",
+    body: `<p><b>${esc(btn.dataset.name)}</b></p><p>Its Excel and PDF are removed from the Stock Reports. The firm's next report then carries on from the one before this.</p>`,
+  }))) return;
   const keepNote = `<div class="keep">Gmail and rows already saved to the Google Sheet are not touched.</div>`;
   if (btn.dataset.action === "delete" && !(await askDialog({
     title: "Delete this file?",
@@ -852,7 +1006,7 @@ document.addEventListener("click", async (ev) => {
   if (btn.dataset.action === "clear") {
     const what = { emails: ["Delete all emails?", "<b>every email</b> and everything read from them."],
       extracted: ["Delete all extracted data?", "<b>every extracted file</b> (records, statement rows, the files on disk). The emails stay in the list."],
-      everything: ["Delete everything?", "<b>all emails, extracted data, statement rows, WhatsApp messages and generated stock reports</b>."] }[btn.dataset.scope];
+      everything: ["Delete everything?", "<b>all emails, extracted data, statement rows, WhatsApp messages and one-off stock reports</b>. The Stock Reports tab is kept."] }[btn.dataset.scope];
     if (!(await askDialog({
       title: what[0], typeWord: "DELETE", confirmLabel: "Delete",
       body: `<p>This removes ${what[1]}</p><p>It cannot be undone.</p><div class="keep">Gmail, the Google Sheet, the report formats and the settings are not touched.</div>`,
@@ -879,7 +1033,10 @@ document.addEventListener("click", async (ev) => {
   }))) return;
   btn.disabled = true;
   try {
-    if (btn.dataset.action === "format-remove") {
+    if (btn.dataset.action === "inv-delete") {
+      await api("/inventory/file/" + btn.dataset.ref.split("/").map(encodeURIComponent).join("/"), { method: "DELETE" });
+      toast("Report deleted");
+    } else if (btn.dataset.action === "format-remove") {
       await api(`/stock-templates/${encodeURIComponent(btn.dataset.id)}`, { method: "DELETE" });
       toast("Format removed");
     } else if (btn.dataset.action === "format-review") {
@@ -985,7 +1142,7 @@ refreshSidebar();
 let tick = 0, lastVersion = null;
 setInterval(async () => {
   // Don't re-render under the user: an open <details> or a field being typed in.
-  if (document.hidden || location.hash === "#formats" || document.querySelector("details[open]") || document.activeElement?.matches("input, textarea")) return;
+  if (document.hidden || location.hash === "#formats" || location.hash.startsWith("#inventory") || document.querySelector("details[open]") || document.activeElement?.matches("input, textarea")) return;
   tick += 1;
   const onOverview = (location.hash.slice(1) || "overview").startsWith("overview");
   if (onOverview) {

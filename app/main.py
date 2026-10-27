@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app import network, runtime_settings
 from app.config import settings
 from app.database import get_db, init_db
-from app.routers import dashboard_api, gmail_webhook, invoices, openwa_webhook, stock_templates, whatsapp_webhook
+from app.routers import dashboard_api, gmail_webhook, inventory, invoices, openwa_webhook, stock_templates, whatsapp_webhook
 from app.services import file_link
 from app.worker import pubsub_listener
 from app.worker.scheduler import start_scheduler, stop_scheduler
@@ -39,6 +39,7 @@ app.include_router(gmail_webhook.router)
 app.include_router(invoices.router)
 app.include_router(dashboard_api.router)
 app.include_router(stock_templates.router)
+app.include_router(inventory.router)
 
 
 @app.get("/health")

@@ -10,6 +10,7 @@ import json
 import os
 
 import httplib2
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google_auth_httplib2 import AuthorizedHttp
 from google.oauth2.credentials import Credentials
@@ -85,7 +86,14 @@ def _load_credentials() -> Credentials:
         ) from exc
 
     if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
+        try:
+            creds.refresh(Request())
+        except RefreshError as exc:
+            # Raised as GoogleAuthError so an expired login can't crash app startup (see has_scope).
+            raise GoogleAuthError(
+                f"Google login expired or was revoked ({exc}). Run `python scripts/gmail_oauth_setup.py` again "
+                "and, on a host, update GOOGLE_TOKEN_JSON with the new token.json."
+            ) from exc
         with open(settings.google_token_file, "w") as f:
             f.write(creds.to_json())
 

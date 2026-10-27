@@ -381,14 +381,14 @@ def _remove_file(path: str) -> None:
         logger.warning("Couldn't remove %s: %s", path, exc)
 
 
-def _empty_folder(folder: str) -> int:
+def _empty_folder(folder: str, keep: tuple[str, ...] = ()) -> int:
     """Removes the files (and sub-folders) inside `folder`, but not the folder
-    itself, a .gitkeep, or hidden entries (e.g. LibreOffice's profile)."""
+    itself, a .gitkeep, hidden entries (e.g. LibreOffice's profile) or the names in `keep`."""
     removed = 0
     if not os.path.isdir(folder):
         return 0
     for name in os.listdir(folder):
-        if name.startswith("."):
+        if name.startswith(".") or name in keep:
             continue
         path = os.path.join(folder, name)
         try:
@@ -473,7 +473,8 @@ def clear_data(body: ClearRequest, db: Session = Depends(get_db)):
     extracted   every extracted file (records, statement rows, the files on disk);
                 the emails stay, listed as "file deleted"
     emails      every email and everything read from it
-    everything  all of the above, the WhatsApp message log, and the stock reports made
+    everything  all of the above, the WhatsApp message log, and the one-off stock reports made (the Stock Reports tab's
+                history is kept)
 
     The sync cursor stays, so deleted emails are not fetched again."""
     if body.scope not in ("emails", "extracted", "everything"):
@@ -492,7 +493,7 @@ def clear_data(body: ClearRequest, db: Session = Depends(get_db)):
         _remove_file(path)
     leftovers = 0
     if body.scope == "everything":
-        leftovers = _empty_folder(settings.pdf_storage_dir) + _empty_folder(settings.stock_report_dir)
+        leftovers = _empty_folder(settings.pdf_storage_dir) + _empty_folder(settings.stock_report_dir, keep=("monthly",))  # the Stock Reports tab's history stays
     logger.warning("Dashboard clear (%s): %d files, %d emails, %d messages, %d other files", body.scope, len(paths), emails, messages, leftovers)
     return {"scope": body.scope, "invoices": len(paths), "emails": emails, "messages": messages}
 

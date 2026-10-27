@@ -12,6 +12,8 @@ stock_report.py) names the template, the output files and what to write:
     insert_after / insert_count   add rows below that row (1-based), formatted like it,
     first_row / last_row          and the TOTAL row's SUM(first:last) stretches over them
     merges                        ranges to merge in the new rows
+    carry                         {first_row, last_row, description, balance, opening, received, delivered, formula}:
+                                  the template is the previous report — closing balances become the opening ones
     clear                         {first_row, last_row, first_column, last_column}: typed
                                   text and numbers (not formulas) of a filled-in sample's
                                   old stock lines are wiped before ours are written
@@ -122,6 +124,24 @@ def _insert_rows(sheet, job):
                 cell.setFormula(stretched)
 
 
+def _carry_balances(sheet, carry):
+    """The template is the company's previous report: each goods line's closing balance becomes its
+    opening balance and its received / delivered go empty. Rate, margin and the other formulas stay."""
+    opening, received, delivered = (_column(carry[k]) if carry[k] else None for k in ("opening", "received", "delivered"))
+    for row in range(carry["first_row"] - 1, carry["last_row"]):
+        if not sheet.getCellByPosition(_column(carry["description"]), row).getString().strip():
+            continue  # an empty line of the sample
+        balance = sheet.getCellByPosition(_column(carry["balance"]), row)
+        closing = balance.getValue()
+        if not _is_formula(balance):
+            balance.setFormula(carry["formula"].format(r=row + 1))  # a typed balance would not follow the new figures
+        if opening is not None:
+            sheet.getCellByPosition(opening, row).setValue(closing)
+        for column in (received, delivered):
+            if column is not None:
+                sheet.getCellByPosition(column, row).clearContents(_VALUE | _STRING)
+
+
 def _clear_sample_lines(sheet, clear):
     """Wipes the old stock lines' typed text and numbers, leaving formulas and formatting."""
     left, right = _column(clear["first_column"]), _column(clear["last_column"])
@@ -225,6 +245,13 @@ def _keep_row_heights(sheet, heights):
             row.Height = height
 
 
+def _fit_to_one_page(doc, sheet):
+    """The whole report prints on one page, so no table or cell is split across pages."""
+    page_style = doc.StyleFamilies.getByName("PageStyles").getByName(sheet.PageStyle)
+    page_style.ScaleToPagesX = 1
+    page_style.ScaleToPagesY = 1
+
+
 def _set_date(cell, date):
     """Replaces only the date's characters (or appends it to a bare 'Dated:'), so the cell keeps its
     own bold / size."""
@@ -252,6 +279,8 @@ def fill(job):
             for name in list(sheets.ElementNames)[1:]:
                 sheets.removeByName(name)
 
+            if job.get("carry"):
+                _carry_balances(sheet, job["carry"])
             if job.get("insert_count"):
                 _insert_rows(sheet, job)
             for cells in job.get("merges", []):
@@ -293,6 +322,7 @@ def fill(job):
                 cell.setString(re.sub(pattern, replacement, cell.getString()))
 
             _keep_row_heights(sheet, heights)
+            _fit_to_one_page(doc, sheet)
             doc.calculateAll()
             doc.storeToURL(uno.systemPathToFileUrl(job["xlsx_out"]), (_prop("FilterName", "Calc MS Excel 2007 XML"),))
             doc.storeToURL(uno.systemPathToFileUrl(job["pdf_out"]), (_prop("FilterName", "calc_pdf_Export"),))
