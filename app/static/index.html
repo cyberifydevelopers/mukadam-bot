@@ -309,6 +309,7 @@ const STATUS = {
 };
 const VERDICT = { bank: ["Bank", "ok"], not_bank: ["Not bank", ""], unsure: ["Unsure", "warn"] };
 const verdictBadge = (v) => { if (!v) return `<span class="muted">—</span>`; const [l, c] = VERDICT[v] || [v, ""]; return `<span class="badge ${c}">${esc(l)}</span>`; };
+const needsFormatBadge = (x) => x ? ` <span class="badge warn" title="This firm has no report format yet, so no stock report is made. Add its Excel sample in Report formats.">Sample chahiye</span>` : "";
 const statusBadge = (s) => { const [label, cls] = STATUS[s] || [s, ""]; return `<span class="badge ${cls}">${esc(label)}</span>`; };
 
 function ticks(status) {
@@ -479,7 +480,7 @@ function docSummary(d) {
   const amount = d.amount ? `${d.currency || "PKR"} ${Number(d.amount).toLocaleString()}` : null;
   const what = d.kind === "statement" ? `Statement · ${d.transactions} transactions`
     : [d.document_type, d.reference && `Ref ${d.reference}`, amount].filter(Boolean).join(" · ");
-  return `<div><a href="#invoice/${d.id}">${esc(d.filename)}</a> ${statusBadge(d.status)}</div>${what ? `<div class="muted" style="font-size:12px">${esc(what)}</div>` : ""}`;
+  return `<div><a href="#invoice/${d.id}">${esc(d.filename)}</a> ${statusBadge(d.status)}${needsFormatBadge(d.needs_format)}</div>${what ? `<div class="muted" style="font-size:12px">${esc(what)}</div>` : ""}`;
 }
 
 // The serial number of each extracted file (the "#" of the Extracted data table).
@@ -574,7 +575,7 @@ const views = {
         <td><div>${esc(s.name)}</div><div class="muted mono">${esc(s.addr)}</div></td>
         <td>${esc(e.subject)}</td>
         <td>${verdictBadge(e.classification)}${e.bank_name ? ` <b>${esc(e.bank_name)}</b>` : ""}${e.classification_reason ? `<div class="muted" style="font-size:12px">${esc(e.classification_reason)}</div>` : ""}</td>
-        <td>${e.invoices.map((i) => `<div><a href="#invoice/${i.id}">${esc(i.pdf_filename.replace(/^[^_]+_/, ""))}</a></div><div>${statusBadge(i.status)} <span class="badge">${esc(i.bank_code)}</span></div>`).join("") || `<span class="muted">—</span>`}</td>
+        <td>${e.invoices.map((i) => `<div><a href="#invoice/${i.id}">${esc(i.pdf_filename.replace(/^[^_]+_/, ""))}</a></div><div>${statusBadge(i.status)}${needsFormatBadge(i.needs_format)} <span class="badge">${esc(i.bank_code)}</span></div>`).join("") || `<span class="muted">—</span>`}</td>
         <td>${deleteEmailButton(e)}</td>
       </tr>`;
     }).join("");
@@ -641,7 +642,7 @@ const views = {
       </div></div>`;
     }
 
-    return pageHeader(`${inv.bank_name} · #${inv.id}`, `${statusBadge(inv.status)} <span class="muted">${esc(inv.pdf_filename.replace(/^[^_]+_/, ""))}</span>`,
+    return pageHeader(`${inv.bank_name} · #${inv.id}`, `${statusBadge(inv.status)}${needsFormatBadge(inv.needs_format)} <span class="muted">${esc(inv.pdf_filename.replace(/^[^_]+_/, ""))}</span>`,
       `<button data-action="back">← Back</button>
        <a class="btn" href="/api/invoices/${inv.id}/pdf" target="_blank" rel="noopener">${content.kind === "email" ? "Open email" : "Open file"} ↗</a>
        <button class="danger" data-action="delete" data-id="${inv.id}" data-name="${esc(inv.pdf_filename.replace(/^[^_]+_/, ""))}">🗑 Delete</button>
@@ -763,8 +764,6 @@ const views = {
           <form class="format-match" data-id="${esc(t.id)}" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
             <label style="flex:2;min-width:220px"><div class="muted" style="font-size:12px">Used for customers named (comma separated)</div>
               <input class="field" name="customers" value="${esc(t.customers.join(", "))}" style="width:100%" required></label>
-            <label style="flex:1;min-width:180px"><div class="muted" style="font-size:12px">Also use for this bank's other customers</div>
-              <input class="field" name="banks" value="${esc(t.banks.join(", "))}" placeholder="e.g. allied" style="width:100%"></label>
             <button type="submit" style="align-self:flex-end">Save</button>
           </form>
           <div class="fmt-actions">
@@ -782,8 +781,6 @@ const views = {
             <input class="field" type="file" name="file" accept=".xlsx,.xls" required style="width:100%"></label>
           <label style="flex:1;min-width:200px"><div class="muted" style="font-size:12px">Customer name (optional, read from the file otherwise)</div>
             <input class="field" name="customer" placeholder="e.g. Al Mustafa Rice Mills" style="width:100%"></label>
-          <label style="flex:1;min-width:180px"><div class="muted" style="font-size:12px">Also use for this bank (optional)</div>
-            <input class="field" name="bank" placeholder="e.g. allied" style="width:100%"></label>
           <button class="primary" type="submit">Add &amp; let AI read it</button>
           <div class="muted" style="font-size:12px;flex-basis:100%">A filled-in report works as a sample: its old stock lines are replaced by the new invoice's goods, and its totals, margins and drawing-power formulas stay as they are. Use <b>Preview PDF</b> afterwards to check every figure lands in the right place.</div>
         </form></div>
@@ -852,7 +849,7 @@ function invoiceTable(list) {
       <td>${esc(i.bank_name)}</td>
       <td class="ellipsis" title="${esc(i.pdf_filename)}">${esc(i.pdf_filename.replace(/^[^_]+_/, ""))}</td>
       <td class="nowrap">${esc(i.txn_date || "—")}</td><td class="num">${i.transaction_counts ? `${i.transaction_counts.total} txns` : esc(i.amount || "—")}</td>
-      <td class="mono">${esc(i.reference_number || "—")}</td><td>${statusBadge(i.status)}</td>
+      <td class="mono">${esc(i.reference_number || "—")}</td><td>${statusBadge(i.status)}${needsFormatBadge(i.needs_format)}</td>
       <td><button class="icon danger" data-action="delete" data-id="${i.id}" data-name="${esc(i.pdf_filename.replace(/^[^_]+_/, ""))}" title="Delete this file">🗑</button></td></tr>`).join("")}
     </tbody></table></div>`;
 }
@@ -1101,7 +1098,7 @@ document.addEventListener("submit", async (ev) => {
       if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
       toast(`Added "${body.name}". Check its layout and use Preview PDF`);
     } else {
-      await api(`/stock-templates/${encodeURIComponent(form.dataset.id)}`, { method: "PUT", body: { customers: form.customers.value, banks: form.banks.value } });
+      await api(`/stock-templates/${encodeURIComponent(form.dataset.id)}`, { method: "PUT", body: { customers: form.customers.value } });
       toast("Saved");
     }
     await render({ quiet: true });

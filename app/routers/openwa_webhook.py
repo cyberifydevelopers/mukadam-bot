@@ -117,6 +117,10 @@ def _send_stock_report(db: Session, record: InvoiceRecord) -> None:
     to_number = record.whatsapp_to_number
     try:
         report = stock_report.build(record)
+    except stock_report.NoFormatError as exc:
+        logger.warning("Stock report for #%s not made: %s", record.id, exc)
+        _send_logged(db, to_number, f"Saved. No stock report was made for #{record.id}. {exc}", record)
+        return
     except Exception as exc:  # noqa: BLE001 — any failure is reported to the approver, not raised
         logger.exception("Stock report for #%s failed", record.id)
         _send_logged(db, to_number, f"Saved, but the stock report for #{record.id} couldn't be made: {exc}", record)
@@ -203,6 +207,10 @@ def _handle_pdf_request(db: Session, request: openwa_service.PdfRequest) -> dict
             return {"status": "ok"}
         try:
             report = stock_report.build(record, regenerate=True)  # made again, so a corrected format shows
+        except stock_report.NoFormatError as exc:
+            _send_logged(db, request.sender_phone, f"No stock report was made for #{record.id}. {exc}", record)
+            db.commit()
+            return {"status": "ok"}
         except Exception as exc:  # noqa: BLE001 — reported to the person asking, not raised
             logger.exception("Stock report for #%s failed", record.id)
             _send_logged(db, request.sender_phone, f"The stock report for #{record.id} couldn't be made: {exc}", record)

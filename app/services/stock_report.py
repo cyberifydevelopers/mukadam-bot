@@ -52,6 +52,10 @@ class StockReportError(Exception):
     pass
 
 
+class NoFormatError(StockReportError):
+    """The firm has no report format (Excel sample) yet: no report is made until one is added."""
+
+
 @dataclass
 class StockReport:
     xlsx_path: str
@@ -98,22 +102,35 @@ def _safe_filename(text: str) -> str:
     return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", text).strip(" .")[:80] or "Stock Report"
 
 
-def pick_template(record: InvoiceRecord, order: dict) -> Template:
-    """The customer's own format if there is one, else the bank's, else the default."""
-    entries = stock_templates.load()
+def format_for(order: dict) -> Template | None:
+    """The firm's own format (matched by its name), or None. Another firm's format is never used instead: a
+    report in the wrong layout looks right but isn't."""
     customer = stock_templates.normalise(_customer(order))
-    for entry in entries:
+    for entry in stock_templates.load():
         if any(c in customer for c in entry.template.customers):
             return entry.template
-    extra = json.loads(record.raw_extracted_json or "{}")
-    bank = f"{record.bank_code} {record.bank_name} {extra.get('bank_name')}".lower()
-    for entry in entries:
-        if any(b in bank for b in entry.template.banks):
-            return entry.template
-    entry = stock_templates.default(entries)
-    if entry is None:
-        raise StockReportError("There are no report formats. Add one in the dashboard's Report formats tab.")
-    return entry.template
+    return None
+
+
+def customer_name(record: InvoiceRecord) -> str:
+    order = delivery_order(record)
+    return _customer(order) if order else ""
+
+
+def needs_format(record: InvoiceRecord) -> bool:
+    """True for a stock document whose firm has no report format yet."""
+    order = delivery_order(record)
+    return order is not None and format_for(order) is None
+
+
+def pick_template(record: InvoiceRecord, order: dict) -> Template:
+    template = format_for(order)
+    if template is None:
+        raise NoFormatError(
+            f"There is no report format for {_customer(order)} yet. Add its Excel sample (an earlier filled-in report) "
+            f"in the dashboard's Report formats tab, then send \"share pdf for {record.id}\"."
+        )
+    return template
 
 
 def _fill_in(text: str, **values: str) -> str:

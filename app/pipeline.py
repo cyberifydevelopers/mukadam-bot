@@ -567,6 +567,8 @@ def _send_confirmation(record: InvoiceRecord) -> None:
         else "Reply YES to save, or NO to skip.",
         f"(With several waiting, reply YES {record.id} or NO {record.id}.)",
         *([] if has_stock else ["", "📌 *Note: No stock related data found in this file / mail.*"]),
+        *(["", f"⚠️ *No report format for {stock_report.customer_name(record)} yet* — add its Excel sample in the dashboard's "
+              "Report formats tab, or the stock report can't be made."] if stock_report.needs_format(record) else []),
         *_view_file_lines(record),
     ])
     messages = _pack([*blocks, footer])
