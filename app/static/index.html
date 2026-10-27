@@ -309,7 +309,7 @@ const STATUS = {
 };
 const VERDICT = { bank: ["Bank", "ok"], not_bank: ["Not bank", ""], unsure: ["Unsure", "warn"] };
 const verdictBadge = (v) => { if (!v) return `<span class="muted">—</span>`; const [l, c] = VERDICT[v] || [v, ""]; return `<span class="badge ${c}">${esc(l)}</span>`; };
-const needsFormatBadge = (x) => x ? ` <span class="badge warn" title="This firm has no report format yet, so no stock report is made. Add its Excel sample in Report formats.">Sample chahiye</span>` : "";
+const needsFormatBadge = (x) => x ? ` <span class="badge warn" title="This firm has no report format yet, so no stock report is made. Add its Excel sample in Report formats.">Sample required</span>` : "";
 const statusBadge = (s) => { const [label, cls] = STATUS[s] || [s, ""]; return `<span class="badge ${cls}">${esc(label)}</span>`; };
 
 function ticks(status) {
