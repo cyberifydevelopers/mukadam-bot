@@ -336,10 +336,10 @@ def _validate(ws, a: dict, original_name: str, customer_hint: str) -> Review:
         notes.append("No customer name could be told apart, so the format is matched on its name only. Edit the match words if needed.")
     bank = (a.get("bank_name") or "").strip()
     if bank:
-        notes.append(f"Addressed to {bank}. Add the bank's name under 'Also use for this bank' to use this format for that bank's other customers.")
+        notes.append(f"Addressed to {bank}: this format is also used for that bank's other customers (change it under 'Also use for this bank').")
 
     template = Template(
-        file="", customers=customers, banks=(), first_row=first, last_row=last, description=columns["description"],
+        file="", customers=customers, banks=stock_templates.bank_words(bank), first_row=first, last_row=last, description=columns["description"],
         opening=columns["opening"], received=columns["received"], delivered=columns["delivered"],
         balance=columns["balance"], rate=columns["rate"], value=columns["value"], dp=dp,
         date_cell=date_cell.coordinate if date_cell is not None else None, text_cell=text_cell.coordinate,

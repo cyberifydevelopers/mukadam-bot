@@ -129,7 +129,7 @@ def _send_stock_report(db: Session, record: InvoiceRecord) -> None:
     files = [(report.pdf_path, stock_report.PDF_MIME), (report.xlsx_path, stock_report.XLSX_MIME)]
     files = [(path, mime) for path, mime in files if path]
     for n, (path, mimetype) in enumerate(files):
-        caption = f"Stock report for #{record.id} — {report.customer}" if n == 0 else None
+        caption = stock_report.caption(record, report) if n == 0 else None
         message_id = error = None
         try:
             message_id = openwa_service.send_document(to_number, path, mimetype, caption)
@@ -218,7 +218,7 @@ def _handle_pdf_request(db: Session, request: openwa_service.PdfRequest) -> dict
             return {"status": "ok"}
         path = report.pdf_path
         name = os.path.basename(path)
-        caption = f"Stock report for #{record.id} — {report.customer}"
+        caption = stock_report.caption(record, report)
     message_id = error = None
     try:
         message_id = openwa_service.send_document(

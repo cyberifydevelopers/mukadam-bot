@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mukadam Bot</title>
+<title>Muccaddam Bot</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563eb'/%3E%3Cpath d='M9 8h10l5 5v11a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z' fill='white'/%3E%3Cpath d='M11 17h10M11 21h7' stroke='%232563eb' stroke-width='2'/%3E%3C/svg%3E">
 <style>
   :root {
@@ -152,6 +152,10 @@
   .inv-row.active { background: var(--info-bg); }
   .inv-pick { flex: 1; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; text-align: left; padding: 9px 14px; background: none; border: 0; color: var(--fg); font: inherit; cursor: pointer; }
   .inv-pick:hover { background: var(--info-bg); }
+  .inv-bar-sel { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-top: 1px solid var(--border); font-size: 13px; }
+  .inv-bar-sel label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .inv-bar-sel button { margin-left: auto; }
+  .inv-check { align-self: center; margin-left: 14px; cursor: pointer; }
   .inv-del { padding: 0 12px; background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 15px; }
   .inv-del:hover { color: var(--bad); }
   .inv-view { position: sticky; top: 16px; }
@@ -231,7 +235,7 @@
 <body>
 <div class="layout">
   <aside>
-    <div class="brand">Mukadam Bot<small>Bank invoice pipeline</small></div>
+    <div class="brand">Muccaddam Bot<small>Bank invoice pipeline</small></div>
     <nav id="nav">
       <a href="#overview" data-tab="overview">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
@@ -251,6 +255,9 @@
       <a href="#formats" data-tab="formats">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
         Report formats</a>
+      <a href="#cad" data-tab="cad">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg>
+        CAD</a>
       <a href="#settings" data-tab="settings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
         Settings</a>
@@ -310,6 +317,20 @@ const STATUS = {
 const VERDICT = { bank: ["Bank", "ok"], not_bank: ["Not bank", ""], unsure: ["Unsure", "warn"] };
 const verdictBadge = (v) => { if (!v) return `<span class="muted">—</span>`; const [l, c] = VERDICT[v] || [v, ""]; return `<span class="badge ${c}">${esc(l)}</span>`; };
 const needsFormatBadge = (x) => x ? ` <span class="badge warn" title="This firm has no report format yet, so no stock report is made. Add its Excel sample in Report formats.">Sample required</span>` : "";
+// Files being re-parsed right now (the request takes a while): shown on their button and in a banner that survives page refreshes.
+const parsing = new Set();
+function showParsing() {
+  let bar = document.getElementById("parsing-bar");
+  if (!parsing.size) { bar?.remove(); return; }
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "parsing-bar";
+    bar.className = "alert info";
+    bar.style.cssText = "position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:60;box-shadow:0 4px 16px rgba(0,0,0,.2);display:flex;gap:8px;align-items:center";
+    document.body.appendChild(bar);
+  }
+  bar.innerHTML = `<span class="spin"></span> <b>Parsing</b> file${parsing.size > 1 ? "s" : ""} ${[...parsing].map((id) => "#" + esc(id)).join(", ")}… please wait`;
+}
 const statusBadge = (s) => { const [label, cls] = STATUS[s] || [s, ""]; return `<span class="badge ${cls}">${esc(label)}</span>`; };
 
 function ticks(status) {
@@ -485,7 +506,10 @@ function docSummary(d) {
 
 // The serial number of each extracted file (the "#" of the Extracted data table).
 const serials = (docs) => docs.map((d) => `<div><a href="#invoice/${d.id}"><b>#${d.id}</b></a></div>`).join("") || `<span class="muted">—</span>`;
-const deleteEmailButton = (e) => `<button class="icon danger" data-action="delete-email" data-id="${e.id}" data-name="${esc(e.subject || "(no subject)")}" title="Delete this email and its extracted data">🗑</button>`;
+const deleteEmailButton = (e, docs = e.documents || e.invoices || []) => `${docs.map((d) => parsing.has(String(d.id))
+  ? `<button class="icon" disabled title="Parsing file #${d.id}"><span class="spin"></span> Parsing…</button>`
+  : `<button class="icon" data-action="reparse" data-id="${d.id}" data-status="${esc(d.status)}" title="Read file #${d.id} again">↻ Re-parse${docs.length > 1 ? " #" + d.id : ""}</button>`).join(" ")}
+  <button class="icon danger" data-action="delete-email" data-id="${e.id}" data-name="${esc(e.subject || "(no subject)")}" title="Delete this email and its extracted data">🗑</button>`;
 
 const SELECTION = {
   selected: ["Selected", "ok"],
@@ -646,7 +670,7 @@ const views = {
       `<button data-action="back">← Back</button>
        <a class="btn" href="/api/invoices/${inv.id}/pdf" target="_blank" rel="noopener">${content.kind === "email" ? "Open email" : "Open file"} ↗</a>
        <button class="danger" data-action="delete" data-id="${inv.id}" data-name="${esc(inv.pdf_filename.replace(/^[^_]+_/, ""))}">🗑 Delete</button>
-       <button class="${inv.status === "FAILED_PARSE" ? "primary" : ""}" data-action="reparse" data-id="${inv.id}" data-status="${inv.status}">↻ Re-parse file</button>
+       <button class="${inv.status === "FAILED_PARSE" ? "primary" : ""}" data-action="reparse" data-id="${inv.id}" data-status="${inv.status}" ${parsing.has(String(inv.id)) ? "disabled" : ""}>${parsing.has(String(inv.id)) ? `<span class="spin"></span> Parsing…` : "↻ Re-parse file"}</button>
        ${canResend ? `<button class="primary" data-action="resend" data-id="${inv.id}">Resend on WhatsApp</button>` : ""}`) + `
       ${inv.parse_error && !st ? `<div class="alert bad"><b>Parse error:</b> ${esc(inv.parse_error)}</div>` : ""}
       ${content.error ? `<div class="alert bad"><b>Couldn't read PDF:</b> ${esc(content.error)}</div>` : ""}
@@ -720,10 +744,13 @@ const views = {
           rows += `<div class="inv-month">${esc(new Date(+y, +m - 1).toLocaleString(undefined, { month: "long", year: "numeric" }))}</div>`;
         }
         rows += `<div class="inv-row" data-ref="${esc(r.ref)}">
+          <input type="checkbox" class="inv-check" data-ref="${esc(r.ref)}" aria-label="Select this report">
           <button class="inv-pick" data-action="inv-open" data-ref="${esc(r.ref)}" data-name="${esc(r.name)}" data-xlsx="${r.xlsx ? 1 : 0}"><b>${esc(r.date)}</b><span class="muted">${r.record ? "#" + esc(r.record) : ""}</span></button>
           <button class="inv-del" data-action="inv-delete" data-ref="${esc(r.ref)}" data-name="${esc(r.name)}" title="Delete this report">✕</button></div>`;
       }
-      return `<div class="panel inv-list ${i === chosen ? "active" : ""}" data-firm="${i}" data-key="${esc(f.key)}" data-first="${esc(f.reports[0].ref)}"><h2>${esc(f.name)} <span class="right">${f.reports.length} report${f.reports.length === 1 ? "" : "s"}</span></h2>${rows}</div>`;
+      return `<div class="panel inv-list ${i === chosen ? "active" : ""}" data-firm="${i}" data-key="${esc(f.key)}" data-first="${esc(f.reports[0].ref)}"><h2>${esc(f.name)} <span class="right">${f.reports.length} report${f.reports.length === 1 ? "" : "s"}</span></h2>
+        <div class="inv-bar-sel"><label><input type="checkbox" class="inv-all"> Select all</label><span class="muted inv-count"></span>
+          <button class="danger" data-action="inv-delete-selected" disabled>Delete selected</button></div>${rows}</div>`;
     }).join("");
     return pageHeader("Stock Reports", "Every stock report, firm by firm and date by date. Each report carries on from the one before it; click one to open it here.") + `
       <div class="chips" style="align-items:center">
@@ -785,6 +812,26 @@ const views = {
           <div class="muted" style="font-size:12px;flex-basis:100%">A filled-in report works as a sample: its old stock lines are replaced by the new invoice's goods, and its totals, margins and drawing-power formulas stay as they are. Use <b>Preview PDF</b> afterwards to check every figure lands in the right place.</div>
         </form></div>
       ${templates.length ? cards : `<div class="empty-state">No report formats yet. Add an Excel sample above.</div>`}`;
+  },
+
+  async cad() {
+    const { contacts } = await api("/cad");
+    const rows = contacts.map((c) => `<tr>
+      <td><b>${esc(c.address)}</b>${c.is_domain ? ` <span class="badge info">whole domain</span>` : ""}</td>
+      <td>${esc(c.name || "—")}</td><td class="nowrap">${esc(fmtTime(c.added_at))}</td>
+      <td><button class="icon danger" data-action="cad-remove" data-id="${c.id}" data-address="${esc(c.address)}" data-name="${esc(c.name || "")}"${contacts.length === 1 ? ' data-last="1"' : ""} title="Remove">🗑</button></td></tr>`).join("");
+    return pageHeader("CAD", "The CAD officers and bank people whose emails the bot entertains. An email is read only when it, or the original message it forwards, is from someone on this list.") + `
+      <div class="panel"><h2>Add a person</h2>
+        <form id="cad-form" class="panel-body" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+          <label style="flex:2;min-width:240px"><div class="muted" style="font-size:12px">Email address (or a whole domain, e.g. @meezanbank.com)</div>
+            <input class="field" name="address" placeholder="officer@meezanbank.com" required style="width:100%"></label>
+          <label style="flex:1;min-width:180px"><div class="muted" style="font-size:12px">Name (optional)</div>
+            <input class="field" name="name" placeholder="e.g. Asif Raza" style="width:100%"></label>
+          <button class="primary" type="submit">Add</button>
+        </form></div>
+      <div class="panel"><h2>Allowed senders <span class="right">${contacts.length}</span></h2>
+        ${contacts.length ? `<div class="table-wrap"><table><thead><tr><th>Email</th><th>Name</th><th>Added</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+          : `<div class="empty-state">The list is empty, so emails from anyone are read. Add a CAD officer above to read only their emails.</div>`}</div>`;
   },
 
   async settings() {
@@ -975,6 +1022,21 @@ async function refreshSidebar() {
   } catch { /* sidebar status is best-effort */ }
 }
 
+// Stock Reports: tick reports (or "Select all") of a firm, then delete them together.
+const invChecked = (list) => [...list.querySelectorAll(".inv-check:checked")];
+document.addEventListener("change", (ev) => {
+  const list = ev.target.closest(".inv-list");
+  if (!list || !ev.target.matches(".inv-check, .inv-all")) return;
+  const boxes = [...list.querySelectorAll(".inv-check")];
+  if (ev.target.matches(".inv-all")) boxes.forEach((b) => { b.checked = ev.target.checked; });
+  const n = invChecked(list).length;
+  list.querySelector(".inv-all").checked = n > 0 && n === boxes.length;
+  list.querySelector(".inv-count").textContent = n ? `${n} selected` : "";
+  const del = list.querySelector("[data-action=inv-delete-selected]");
+  del.disabled = !n;
+  del.textContent = n ? `Delete selected (${n})` : "Delete selected";
+});
+
 document.addEventListener("click", async (ev) => {
   const row = ev.target.closest("tr[data-href]");
   if (row && row.dataset.href && !ev.target.closest("a, button, input, .sel-col")) { location.hash = row.dataset.href; return; }
@@ -990,6 +1052,14 @@ document.addEventListener("click", async (ev) => {
     title: "Delete this report?", confirmLabel: "Delete",
     body: `<p><b>${esc(btn.dataset.name)}</b></p><p>Its Excel and PDF are removed from the Stock Reports. The firm's next report then carries on from the one before this.</p>`,
   }))) return;
+  let invRefs = [];
+  if (btn.dataset.action === "inv-delete-selected") {
+    invRefs = invChecked(btn.closest(".inv-list")).map((b) => b.dataset.ref);
+    if (!invRefs.length || !(await askDialog({
+      title: `Delete ${invRefs.length} report${invRefs.length > 1 ? "s" : ""}?`, confirmLabel: "Delete selected",
+      body: `<p>Their Excel and PDF files are removed from the Stock Reports.</p><p>The firm's next report then carries on from the latest one left.</p><p>It cannot be undone.</p>`,
+    }))) return;
+  }
   const keepNote = `<div class="keep">Gmail and rows already saved to the Google Sheet are not touched.</div>`;
   if (btn.dataset.action === "delete" && !(await askDialog({
     title: "Delete this file?",
@@ -1024,6 +1094,10 @@ document.addEventListener("click", async (ev) => {
     title: "Read this document again?", confirmLabel: "Read again", danger: false,
     body: `<p>This document is already saved to the Google Sheet.</p><p>It will be read again and a new WhatsApp prompt sent. Answering YES again adds it to the Sheet a second time (and sends the stock report).</p>`,
   }))) return;
+  if (btn.dataset.action === "cad-remove" && !(await askDialog({
+    title: "Remove this person?", confirmLabel: "Remove",
+    body: `<p><b>${esc(btn.dataset.address)}</b>${btn.dataset.name ? ` (${esc(btn.dataset.name)})` : ""}</p><p>Emails from them will no longer be read${btn.dataset.last ? ", and as this is the last person on the list, emails from anyone will be read again" : ""}.</p>`,
+  }))) return;
   if (btn.dataset.action === "format-remove" && !(await askDialog({
     title: "Remove this report format?", confirmLabel: "Remove",
     body: `<p><b>${esc(btn.dataset.name)}</b></p><p>Reports for these customers will use another format afterwards. The Excel file is deleted from the server (download it first if you need it).</p>`,
@@ -1033,6 +1107,9 @@ document.addEventListener("click", async (ev) => {
     if (btn.dataset.action === "inv-delete") {
       await api("/inventory/file/" + btn.dataset.ref.split("/").map(encodeURIComponent).join("/"), { method: "DELETE" });
       toast("Report deleted");
+    } else if (btn.dataset.action === "inv-delete-selected") {
+      for (const ref of invRefs) await api("/inventory/file/" + ref.split("/").map(encodeURIComponent).join("/"), { method: "DELETE" });
+      toast(`${invRefs.length} report${invRefs.length > 1 ? "s" : ""} deleted`);
     } else if (btn.dataset.action === "format-remove") {
       await api(`/stock-templates/${encodeURIComponent(btn.dataset.id)}`, { method: "DELETE" });
       toast("Format removed");
@@ -1040,12 +1117,23 @@ document.addEventListener("click", async (ev) => {
       toast("The AI is reading the sample… this takes a few seconds");
       await api(`/stock-templates/${encodeURIComponent(btn.dataset.id)}/review`, { method: "POST" });
       toast("Read again. Check the layout and use Preview PDF");
+    } else if (btn.dataset.action === "cad-remove") {
+      await api(`/cad/${btn.dataset.id}`, { method: "DELETE" });
+      toast(`Removed ${btn.dataset.address}`);
     } else if (btn.dataset.action === "sync") {
       const r = await api("/sync", { method: "POST" });
       toast(r.new_invoices_queued ? `${r.new_invoices_queued} new PDF(s) picked up` : "No new emails");
     } else if (btn.dataset.action === "reparse") {
-      toast("Re-parsing… this can take a few seconds");
-      const r = await api(`/invoices/${btn.dataset.id}/reparse`, { method: "POST" });
+      parsing.add(btn.dataset.id);
+      showParsing();
+      btn.innerHTML = `<span class="spin"></span> Parsing…`;
+      let r;
+      try {
+        r = await api(`/invoices/${btn.dataset.id}/reparse`, { method: "POST" });
+      } finally {
+        parsing.delete(btn.dataset.id);
+        showParsing();
+      }
       toast(r.status === "FAILED_PARSE" ? "Still failing. See the error above."
         : r.transaction_counts ? (r.status === "SEND_FAILED" ? "WhatsApp send failed. See the conversation below." : r.status === "STATEMENT" ? "Account statement: not tracked, nothing sent." : `Sent ${r.transaction_counts.total} transactions on WhatsApp as one message`)
         : "Parsed" + (r.status === "PENDING_CONFIRMATION" ? " and sent on WhatsApp" : ""));
@@ -1111,6 +1199,22 @@ document.addEventListener("submit", async (ev) => {
 });
 
 document.addEventListener("submit", async (ev) => {
+  if (ev.target.id !== "cad-form") return;
+  ev.preventDefault();
+  const form = ev.target, btn = form.querySelector("button");
+  btn.disabled = true;
+  try {
+    const added = await api("/cad", { method: "POST", body: { address: form.address.value, name: form.name.value } });
+    toast(`Added ${added.address}`);
+    await render({ quiet: true });
+  } catch (e) {
+    toast("Error: " + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.addEventListener("submit", async (ev) => {
   if (ev.target.id !== "notify-form") return;
   ev.preventDefault();
   const form = ev.target, btn = form.querySelector("button");
@@ -1139,7 +1243,7 @@ refreshSidebar();
 let tick = 0, lastVersion = null;
 setInterval(async () => {
   // Don't re-render under the user: an open <details> or a field being typed in.
-  if (document.hidden || location.hash === "#formats" || location.hash.startsWith("#inventory") || document.querySelector("details[open]") || document.activeElement?.matches("input, textarea")) return;
+  if (document.hidden || location.hash === "#formats" || location.hash === "#cad" || location.hash.startsWith("#inventory") || document.querySelector("details[open]") || document.activeElement?.matches("input, textarea")) return;
   tick += 1;
   const onOverview = (location.hash.slice(1) || "overview").startsWith("overview");
   if (onOverview) {

@@ -22,7 +22,7 @@ import re
 import shutil
 import subprocess
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -62,6 +62,7 @@ class StockReport:
     pdf_path: str
     customer: str
     template: str
+    missing: list[str] = field(default_factory=list)  # what the document didn't give, in words for the approver
 
 
 def delivery_order(record: InvoiceRecord) -> dict | None:
@@ -102,13 +103,30 @@ def _safe_filename(text: str) -> str:
     return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", text).strip(" .")[:80] or "Stock Report"
 
 
-def format_for(order: dict) -> Template | None:
-    """The firm's own format (matched by its name), or None. Another firm's format is never used instead: a
-    report in the wrong layout looks right but isn't."""
+def bank_of(record: InvoiceRecord, order: dict) -> str:
+    """The bank the report is for: the one the client's letter is addressed to, else the one that issued the document."""
+    return (order.get("addressee_bank") or record.bank_name or "").strip()
+
+
+def is_own_format(template: Template, order: dict) -> bool:
+    """True if `template` is set up for this firm itself (not borrowed from its bank)."""
     customer = stock_templates.normalise(_customer(order))
-    for entry in stock_templates.load():
+    return any(c in customer for c in template.customers)
+
+
+def format_for(order: dict, bank: str | None = None) -> Template | None:
+    """The firm's own format (its uploaded report, matched by name: its rates, margins and goods carry on into
+    each new report); failing that, the approved format of its bank — a bank asks for its own layout whichever
+    firm the stock is of — else None. With several formats for one bank, the first registered."""
+    entries = stock_templates.load()
+    customer = stock_templates.normalise(_customer(order))
+    for entry in entries:
         if any(c in customer for c in entry.template.customers):
             return entry.template
+    if bank:
+        for entry in entries:
+            if stock_templates.bank_matches(entry.template.banks, bank):
+                return entry.template
     return None
 
 
@@ -118,18 +136,22 @@ def customer_name(record: InvoiceRecord) -> str:
 
 
 def needs_format(record: InvoiceRecord) -> bool:
-    """True for a stock document whose firm has no report format yet."""
+    """True for a stock document whose firm and bank have no report format yet."""
     order = delivery_order(record)
-    return order is not None and format_for(order) is None
+    return order is not None and format_for(order, bank_of(record, order)) is None
 
 
 def pick_template(record: InvoiceRecord, order: dict) -> Template:
-    template = format_for(order)
+    bank = bank_of(record, order)
+    template = format_for(order, bank)
     if template is None:
         raise NoFormatError(
-            f"There is no report format for {_customer(order)} yet. Add its Excel sample (an earlier filled-in report) "
-            f"in the dashboard's Report formats tab, then send \"share pdf for {record.id}\"."
+            f"There is no report format for {_customer(order)}" + (f" or {bank}" if bank else "") + " yet. Add a "
+            f"{bank + ' ' if bank else ''}Excel sample (an earlier filled-in report) in the dashboard's Report formats "
+            f"tab, then send \"share pdf for {record.id}\"."
         )
+    if not is_own_format(template, order):
+        logger.info("Stock report #%s: no format for %s, using %s's (%s)", record.id, _customer(order), bank, template.file)
     return template
 
 
@@ -218,14 +240,19 @@ def build_job(template: Template, order: dict, dated: datetime, previous: dict |
         job.update(insert_after=end, insert_count=added, first_row=t.first_row, last_row=end)
         job["merges"] = [f"{a}{r}:{b}{r}" for r in range(end + 1, end + added + 1) for a, b in t.row_merges]
     job["state"] = {"last_row": end + added}
+    mapped = [
+        c for c in (
+            t.description, t.opening, t.received, t.delivered, t.balance,
+            t.rate, t.value, t.dp, t.margin, t.less_margin, t.lc_column,
+            t.last_column,
+        ) if c
+    ]
+    # The stock lines and the TOTAL row under them: a figure too wide for its column shrinks to fit instead of showing ###.
+    job["fit"] = {
+        "first_row": t.first_row, "last_row": end + added + 1,
+        "first_column": min(mapped, key=lambda c: (len(c), c)), "last_column": max(mapped, key=lambda c: (len(c), c)),
+    }
     if t.clear_sample and not previous:
-        mapped = [
-            c for c in (
-                t.description, t.opening, t.received, t.delivered, t.balance,
-                t.rate, t.value, t.dp, t.margin, t.less_margin, t.lc_column,
-                t.last_column,
-            ) if c
-        ]
         job["clear"] = {
             "first_row": t.first_row, "last_row": max(t.last_row, t.first_row + len(rows) - 1),
             "first_column": min(mapped, key=lambda c: (len(c), c)), "last_column": max(mapped, key=lambda c: (len(c), c)),
@@ -364,11 +391,13 @@ def _order_key(state: dict) -> tuple[str, str]:
     return day, state.get("created", "")
 
 
-def _previous_report(customer: str, template: Template, before: tuple[str, str]) -> tuple[dict, str] | None:
+def _previous_report(customer: str, template: Template, before: tuple[str, str], record: int | None = None) -> tuple[dict, str] | None:
     """The company's report just before `before` (a date and creation time, see _order_key) — its state
-    and .xlsx — if it was made from the same format."""
+    and .xlsx — if it was made from the same format. A report made from the same document (`record`, read and
+    confirmed again) is that document's own earlier try, never what comes before it."""
     states = [(s, p) for name in _company_folders(customer, template)
-              for p in Path(settings.stock_report_dir, "monthly", name).glob("*/*.json") if (s := _read_state(str(p))) and _order_key(s) < before]
+              for p in Path(settings.stock_report_dir, "monthly", name).glob("*/*.json")
+              if (s := _read_state(str(p))) and _order_key(s) < before and (record is None or s.get("record") != record)]
     if not states:
         return None
     state, path = max(states, key=lambda sp: _order_key(sp[0]))
@@ -435,10 +464,12 @@ def render(
                     n += 1
                     base = os.path.join(out_dir, f"{name} ({n})")
             previous = _previous_report(
-                customer, template, _order_key(own[0]) if own else (f"{dated:%Y-%m-%d}", "￿")
+                customer, template, _order_key(own[0]) if own else (f"{dated:%Y-%m-%d}", "￿"), monthly_record
             ) if monthly_record is not None else None
-            if monthly_record is not None and previous is None and template.clear_sample and path.suffix.lower() == ".xlsx":
-                # An uploaded sample is a report somebody already made: it is the company's previous report.
+            if (monthly_record is not None and previous is None and template.clear_sample and path.suffix.lower() == ".xlsx"
+                    and is_own_format(template, order)):
+                # An uploaded sample is a report somebody already made: it is the company's previous report —
+                # unless it is another firm's, borrowed for its bank's layout: then it is only wiped and refilled.
                 previous = ({"last_row": template.last_row}, str(path))
             lines = _previous_lines(template, *previous) if previous else None
 
@@ -520,8 +551,46 @@ def document_date(record: InvoiceRecord) -> datetime | None:
     return None
 
 
+def missing_data(order: dict, template: Template, report: StockReport, dated: datetime | None) -> list[str]:
+    """What the report still lacks because the document didn't give it — read back from the finished sheet, so
+    a rate carried on from the previous report doesn't count as missing."""
+    notes = []
+    try:
+        state = _read_state(str(Path(report.xlsx_path).with_suffix(".json"))) or {}
+        sheet = openpyxl.load_workbook(report.xlsx_path, data_only=True, read_only=True).worksheets[0]
+        no_rate = []
+        for r in range(template.first_row, max(template.last_row, state.get("last_row", 0)) + 1):
+            name = next((str(v).strip() for c in (template.description, template.lc_column) if c and (v := sheet[f"{c}{r}"].value) and str(v).strip()), "")
+            if name and not sheet[f"{template.rate}{r}"].value:
+                no_rate.append(name)
+    except Exception:  # noqa: BLE001 — a note about gaps must never stop the report being sent
+        logger.exception("Couldn't check %s for missing data", report.xlsx_path)
+        no_rate = []
+    if no_rate:
+        notes.append(f"Rate per unit: {', '.join(no_rate)}. Total Value, Less Margin and Drawing Power could not be worked out")
+    if not (order.get("pledge_location") or "").strip():
+        notes.append("Godown / pledge location")
+    if dated is None:
+        notes.append("Date of the document (today's date was used)")
+    return notes
+
+
+def caption(record: InvoiceRecord, report: StockReport) -> str:
+    """The text sent with the report: what it is, and anything the document left out."""
+    text = f"Stock report for #{record.id} — {report.customer}"
+    if report.missing:
+        lines = "\n".join(f"• {m}" for m in report.missing)
+        text += f"\n\n⚠️ Not found in the document:\n{lines}\n\nPlease send these, or fill them in the Excel sheet."
+    return text
+
+
 def build(record: InvoiceRecord, regenerate: bool = False) -> StockReport:
     order = delivery_order(record)
     if order is None:
         raise StockReportError(f"#{record.id} has no delivery-order details to report")
-    return render(pick_template(record, order), order, str(record.id), dated=document_date(record), monthly_record=record.id, regenerate=regenerate)
+    # A document confirmed again (read again after a correction) replaces its report instead of adding a second one.
+    regenerate = regenerate or _own_report(record.id) is not None
+    template, dated = pick_template(record, order), document_date(record)
+    report = render(template, order, str(record.id), dated=dated, monthly_record=record.id, regenerate=regenerate)
+    report.missing = missing_data(order, template, report, dated)
+    return report

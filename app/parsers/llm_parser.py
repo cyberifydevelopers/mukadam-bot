@@ -185,10 +185,22 @@ _FUNCTION = {
                     "<Branch>' — with a table of Opening / Received / Delivered / Closing per stock: fill "
                     "this too (and addressee_bank). IN and OUT: stock 'Received' / 'to be Received' is "
                     "coming INTO the godown (quantity_received); 'Delivered' / 'Released' / 'to be "
-                    "Release(d)' is going OUT (quantity_released); a dash or blank means none. null for "
+                    "Release(d)' is going OUT (quantity_released); a dash or blank means none. The phrase "
+                    "'kindly take the delivery' alone does not say which way: a GRN (goods receipt note) in the "
+                    "subject, or a 'Point of Delivery' / 'Product of Istisna' / disbursement table of stock the "
+                    "bank has financed, means the goods are being DELIVERED INTO our godown — quantity_received, "
+                    "never quantity_released. null for "
                     "anything else, e.g. a collection-of-documents notice."
                 ),
                 "properties": {
+                    "addressed_to": {
+                        "type": ["string", "null"],
+                        "description": (
+                            "The company the bank's letter is addressed to — the 'To,' block under the "
+                            "REF/Date lines (e.g. 'Commander International Pvt Limited', 'MYK Associates "
+                            "(Pvt) Ltd.'), as written; null if there is none"
+                        ),
+                    },
                     "addressee_bank": {
                         "type": ["string", "null"],
                         "description": (

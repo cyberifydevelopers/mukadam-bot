@@ -1,4 +1,4 @@
-# Mukadam Bot
+# Muccaddam Bot
 
 Watches a mailbox for bank payment-advice/invoice emails, extracts the PDF's
 data (amount, date, sender, receiver, reference number), asks for a Yes/No

@@ -247,6 +247,24 @@ def clean_words(words) -> tuple[str, ...]:
     return tuple(seen)
 
 
+_BANK_NOISE = {"bank", "limited", "ltd", "pvt", "private", "the", "pakistan"}
+
+
+def bank_words(name: str | None) -> tuple[str, ...]:
+    """'Meezan Bank Limited' → ('meezan',); 'Habib Metropolitan Bank Ltd.' → ('habib metropolitan',): the part of
+    a bank's name that tells it apart, to be matched against the bank on a document."""
+    words = [w for w in normalise(name or "").split() if w not in _BANK_NOISE]
+    return clean_words([" ".join(words)]) if words else ()
+
+
+def bank_matches(words: tuple[str, ...], bank: str | None) -> bool:
+    """True if the bank named on a document is one of `words` ('habib metro' matches 'Habib Metropolitan Bank';
+    spaces are ignored, so 'habibmetro' does too)."""
+    name = normalise(bank or "")
+    squeezed = name.replace(" ", "")
+    return any(w in name or w.replace(" ", "") in squeezed for w in words)
+
+
 def add(name: str, original_name: str, data: bytes, template: Template, notes: list[str]) -> Entry:
     """Stores an uploaded sample (already reviewed into `template`, whose file is set here)."""
     with _lock:

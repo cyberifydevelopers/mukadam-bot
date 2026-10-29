@@ -139,7 +139,7 @@ sequenceDiagram
     participant Bank as Bank (email sender)
     participant Gmail as Gmail
     participant PubSub as Cloud Pub/Sub
-    participant Bot as Mukadam Bot (FastAPI + scheduler)
+    participant Bot as Muccaddam Bot (FastAPI + scheduler)
     participant DB as SQLite
     participant WA as WhatsApp Cloud API (Meta)
     participant User as User's phone

@@ -96,7 +96,8 @@ def add_template(file: UploadFile, customer: str = Form(""), bank: str = Form(""
             review = stock_template_review.review(path, name, customer.strip())
         except ReviewError as exc:
             raise _fail(exc) from exc
-    template = replace(review.template, banks=stock_templates.clean_words(_words(bank)))
+    typed = stock_templates.clean_words(_words(bank))
+    template = replace(review.template, banks=typed or review.template.banks)  # blank: the bank the sample is addressed to
     try:
         entry = stock_templates.add(review.name, name, data, template, review.notes)
     except TemplateError as exc:

@@ -51,6 +51,19 @@ class AppSetting(Base):
     )
 
 
+class CadContact(Base):
+    """A CAD officer / bank person whose emails are entertained (managed in the
+    dashboard's CAD tab). `address` is a full email, or "@domain.com" for
+    everyone at that domain. With no contacts at all, every sender is accepted."""
+
+    __tablename__ = "cad_contacts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    address: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class ProcessedEmail(Base):
     """One row per Gmail message we have already looked at, so a Pub/Sub
     push notification (or the periodic reconciliation sync) never

@@ -27,6 +27,8 @@ stock_report.py) names the template, the output files and what to write:
                                   words Godown / location / customer / Commander International get the same
                                   bold, underline and size the sample gives them
     replacements                  [cell, regex, replacement] applied to a label (e.g. Rs → USD)
+    fit                           {first_row, last_row, first_column, last_column}: figures in that block shrink
+                                  to fit their column instead of printing as ###
 """
 
 import json
@@ -39,7 +41,7 @@ import uuid
 import uno
 from com.sun.star.beans import PropertyValue
 from com.sun.star.connection import NoConnectException
-from com.sun.star.table.CellContentType import EMPTY, FORMULA
+from com.sun.star.table.CellContentType import EMPTY, FORMULA, VALUE
 
 _DATE = re.compile(r"\d{1,2}[-./]\d{1,2}[-./]\d{2,4}")
 _VALUE, _DATETIME, _STRING, _FORMULA = 1, 2, 4, 16  # com.sun.star.sheet.CellFlags
@@ -62,7 +64,7 @@ def _column(letters):
 
 
 def _start_office(soffice, profile_url):
-    pipe = f"mukadam_{uuid.uuid4().hex}"
+    pipe = f"muccaddam_{uuid.uuid4().hex}"
     local = uno.getComponentContext()
     resolver = local.ServiceManager.createInstanceWithContext("com.sun.star.bridge.UnoUrlResolver", local)
     deadline = time.time() + 120  # the first start creates the profile, which is slow
@@ -245,6 +247,18 @@ def _keep_row_heights(sheet, heights):
             row.Height = height
 
 
+def _shrink_figures(sheet, fit):
+    """A figure wider than its column (a TOTAL such as 25700.000 in a narrow column) would print as ###; its
+    font shrinks to fit instead. Nothing changes for a figure that already fits."""
+    left, right = _column(fit["first_column"]), _column(fit["last_column"])
+    for row in range(fit["first_row"] - 1, fit["last_row"]):
+        for column in range(left, right + 1):
+            cell = sheet.getCellByPosition(column, row)
+            if cell.Type == FORMULA or cell.Type == VALUE:
+                cell.IsTextWrapped = False
+                cell.ShrinkToFit = True
+
+
 def _fit_to_one_page(doc, sheet):
     """The whole report prints on one page, so no table or cell is split across pages."""
     page_style = doc.StyleFamilies.getByName("PageStyles").getByName(sheet.PageStyle)
@@ -322,6 +336,8 @@ def fill(job):
                 cell.setString(re.sub(pattern, replacement, cell.getString()))
 
             _keep_row_heights(sheet, heights)
+            if job.get("fit"):
+                _shrink_figures(sheet, job["fit"])
             _fit_to_one_page(doc, sheet)
             doc.calculateAll()
             doc.storeToURL(uno.systemPathToFileUrl(job["xlsx_out"]), (_prop("FilterName", "Calc MS Excel 2007 XML"),))

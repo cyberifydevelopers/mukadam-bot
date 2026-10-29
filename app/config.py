@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     # document should be addressed to or concern one of them — checked and
     # shown on every WhatsApp prompt (app/verification.py).
     our_company_names: str = ""
+    # A bank's delivery order is taken only when addressed ("To,") to one of
+    # these muccadams (comma-separated); letters to any other company are skipped.
+    stock_addressee_names: str = "Commander International"
+
+    @property
+    def stock_addressee_list(self) -> list[str]:
+        return [n.strip() for n in self.stock_addressee_names.split(",") if n.strip()]
 
     @property
     def our_company_list(self) -> list[str]:

@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session, object_session
 from app.bank_registry import BANK_EMAIL_DOMAINS, BANK_REGISTRY, BankProfile, bank_identity, profile_by_code
 from app.config import settings
 from app.formatting import amount_line, enclosed_documents, format_items
-from app.models import GmailSyncState, InvoiceRecord, InvoiceStatus, ProcessedEmail, StatementTransaction
+from app.models import CadContact, GmailSyncState, InvoiceRecord, InvoiceStatus, ProcessedEmail, StatementTransaction
 from app.parsers.base import ExtractedInvoice
 from app.parsers.llm_parser import LlmInvoiceParser, LlmParseError
 from app.parsers.statement_rows import parse_statement
@@ -175,6 +175,34 @@ def _accept_takeover_request(extracted: ExtractedInvoice) -> None:
         extracted.extra["issuer_is_bank"] = True
 
 
+def _addressed_to_other_company(extracted: ExtractedInvoice) -> str | None:
+    """The addressee of a bank's delivery order when it isn't one of our muccadam
+    companies (STOCK_ADDRESSEE_NAMES); None when it is ours, undetermined, or not
+    a bank-issued order (the client's own takeover request is addressed to a bank)."""
+    order = extracted.extra.get("delivery_order")
+    if not order or not order.get("rows") or order.get("addressee_bank"):
+        return None
+    addressee = (order.get("addressed_to") or "").strip()
+    names = settings.stock_addressee_list
+    if not addressee or not names:
+        return None
+    norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())
+    return None if any(norm(n) in norm(addressee) for n in names) else addressee
+
+
+def _sender_not_allowed(db: Session, fetched: gmail_service.FetchedEmail) -> str | None:
+    """Why the email is skipped when the CAD tab lists contacts and none of the
+    email's senders (From + forwarded From: lines) is one of them; None when it
+    is allowed or the list is empty."""
+    contacts = [c.address for c in db.query(CadContact).all()]
+    if not contacts:
+        return None
+    senders = gmail_service.chain_senders(fetched)
+    if any(s == c or (c.startswith("@") and s.endswith(c)) for s in senders for c in contacts):
+        return None
+    return f"Sender {', '.join(senders[:2]) or fetched.sender} is not in the CAD list — skipped"
+
+
 def _process_one_message(db: Session, message_id: str, notification: tuple[datetime, datetime] | None = None) -> int:
     """`notification` = (published_at, received_at) of the Pub/Sub message
     that triggered this sync, kept on the email for the latency breakdown."""
@@ -189,7 +217,8 @@ def _process_one_message(db: Session, message_id: str, notification: tuple[datet
             raise
         logger.warning("Message %s no longer exists in Gmail — skipped", message_id)
         return 0
-    skip_reason = _documents_to_read(fetched)
+    not_cad = _sender_not_allowed(db, fetched)
+    skip_reason = None if not_cad else _documents_to_read(fetched)
     names =[os.path.basename(p).split("_", 1)[-1] for p in fetched.attachment_paths]
     email = ProcessedEmail(
         message_id=fetched.message_id,
@@ -202,6 +231,10 @@ def _process_one_message(db: Session, message_id: str, notification: tuple[datet
         notification_received_at=notification[1] if notification else None,
     )
     db.add(email)
+    if not_cad:
+        email.classification, email.classification_reason = "not_bank", not_cad
+        set_stage(db, email, "not_bank", not_cad)
+        return 0
     if skip_reason:
         set_stage(db, email, "no_attachment", skip_reason)
         return 0
@@ -237,6 +270,12 @@ def retry_email(db: Session, email: ProcessedEmail) -> int:
         email.classification = email.bank_name = email.classification_reason = None
         set_stage(db, email, "reading", "Retrying — downloading the email again")
         fetched = gmail_service.fetch_email(email.message_id)
+        not_cad = _sender_not_allowed(db, fetched)
+        if not_cad:
+            email.chain_senders = json.dumps(gmail_service.chain_senders(fetched))
+            email.classification, email.classification_reason = "not_bank", not_cad
+            set_stage(db, email, "not_bank", not_cad)
+            return 0
         skip_reason = _documents_to_read(fetched)
         email.attachment_names = json.dumps([os.path.basename(p).split("_", 1)[-1] for p in fetched.attachment_paths])
         email.chain_senders = json.dumps(gmail_service.chain_senders(fetched))
@@ -341,6 +380,15 @@ def extract_document(db: Session, record: InvoiceRecord, doc: Document | None = 
     if not _is_bank(extracted):
         record.status = InvoiceStatus.NOT_BANK
         logger.info("%s is not a bank document — nothing sent", record.pdf_filename)
+        return "not_bank"
+
+    other = _addressed_to_other_company(extracted)
+    if other:
+        reason = f"Addressed to {other}, not {settings.stock_addressee_list[0]} — not ours, skipped"
+        extracted.extra["classification_reason"] = reason
+        record.raw_extracted_json = json.dumps({**json.loads(record.raw_extracted_json), "classification_reason": reason})
+        record.status = InvoiceStatus.NOT_BANK
+        logger.info("%s: %s", record.pdf_filename, reason)
         return "not_bank"
 
     # The letterhead said bank; now verify it against the email it came in
@@ -567,8 +615,8 @@ def _send_confirmation(record: InvoiceRecord) -> None:
         else "Reply YES to save, or NO to skip.",
         f"(With several waiting, reply YES {record.id} or NO {record.id}.)",
         *([] if has_stock else ["", "📌 *Note: No stock related data found in this file / mail.*"]),
-        *(["", f"⚠️ *No report format for {stock_report.customer_name(record)} yet* — add its Excel sample in the dashboard's "
-              "Report formats tab, or the stock report can't be made."] if stock_report.needs_format(record) else []),
+        *(["", f"⚠️ *No report format for this bank or for {stock_report.customer_name(record)} yet* — add an Excel sample in "
+              "the dashboard's Report formats tab, or the stock report can't be made."] if stock_report.needs_format(record) else []),
         *_view_file_lines(record),
     ])
     messages = _pack([*blocks, footer])
