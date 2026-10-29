@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.models import InvoiceRecord, InvoiceStatus
-from app.services import stock_report
+from app.services import goods_profiles, stock_report
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +82,11 @@ def find_existing(db: Session, record: InvoiceRecord, order: dict) -> InvoiceRec
             if old_ref and (old_ref == ref or (same_customer and _within_one(old_ref, ref))):
                 return old
         elif same_customer and (old.created_at or recent) >= recent:
+            # No reference to go by: it must be the same goods (rice figures don't go to a wheat order).
+            new_goods = {g for row in order.get("rows") or [] if (g := goods_profiles.goods_key(row.get("description")))}
+            old_goods = {g for row in old_order.get("rows") or [] if (g := goods_profiles.goods_key(row.get("description")))}
+            if new_goods and not new_goods & old_goods:
+                continue
             return old
     return None
 
@@ -109,8 +114,8 @@ def _pair(old_rows: list[dict], new_rows: list[dict]) -> list[tuple[dict, dict]]
         if best is not None and best_score >= 0.5:
             used.add(best)
             pairs.append((old_rows[best], new))
-        elif len(old_rows) == len(new_rows) and j not in used:
-            used.add(j)
+        elif len(old_rows) == len(new_rows) and j not in used and goods_profiles.goods_key(new.get("description")) in ("", goods_profiles.goods_key(old_rows[j].get("description"))):
+            used.add(j)  # same position, and not obviously other goods
             pairs.append((old_rows[j], new))
     # A line naming no goods and no quantities ("rate 3800" in a short message) is for every line not paired yet.
     for new in new_rows:
