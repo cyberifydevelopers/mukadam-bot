@@ -53,7 +53,8 @@
   button:disabled { opacity: .6; cursor: wait; }
   button.danger { color: var(--bad); }
   button.danger:hover { border-color: var(--bad); background: var(--bad-bg); }
-  button.icon { padding: 3px 8px; }
+  button.icon { padding: 6px 8px; display: inline-flex; align-items: center; justify-content: center; }
+  .ico { width: 16px; height: 16px; flex-shrink: 0; }
 
   .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 20px; }
   .panel > h2 { font-size: 14px; margin: 0; padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
@@ -163,11 +164,171 @@
   .inv-bar .grow { flex: 1; min-width: 160px; font-weight: 600; }
   #inv-frame { width: 100%; height: calc(100vh - 200px); min-height: 520px; border: 0; background: #fff; display: block; border-radius: 0 0 12px 12px; transition: opacity .3s ease; }
   #inv-frame.loading { opacity: 0; }
+  .fmt-add { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; padding: 16px 18px; margin-bottom: 20px; }
+  .fmt-add label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+  .fmt-add-file { flex: 2; min-width: 240px; } .fmt-add-name { flex: 1.4; min-width: 200px; }
+  .fmt-add .field { width: 100%; }
+  .fmt-add-hint { flex-basis: 100%; font-size: 12px; }
+  .fmt-list-head { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 2px 10px; }
+  .fmt-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); gap: 16px; align-items: start; }
+  .fmt-card { margin-bottom: 0; display: flex; flex-direction: column; }
+  .fmt-head { padding: 14px 18px 0; }
+  .fmt-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 15px; }
+  .fmt-file { font-size: 12px; margin-top: 2px; overflow-wrap: anywhere; }
+  .fmt-body { padding: 14px 18px; display: flex; flex-direction: column; gap: 12px; }
+  .format-match label { display: block; font-size: 12px; margin-bottom: 4px; }
+  .fmt-row { display: flex; gap: 8px; } .fmt-row .field { flex: 1; }
+  .fmt-details summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+  .fmt-details summary:hover { color: var(--fg); }
+  .fmt-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 18px; border-top: 1px solid var(--border); margin-top: auto; }
+  @media (max-width: 800px) { .fmt-list { grid-template-columns: 1fr; } }
+  .set-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 20px; }
+  .set-tile { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .set-tile-top { display: flex; align-items: center; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .set-tile-val { font-size: 18px; font-weight: 600; margin-top: 6px; }
+  .set-tile-sub { font-size: 12px; margin-top: 2px; overflow-wrap: anywhere; }
+  .set-cols { display: grid; grid-template-columns: minmax(300px, 2fr) 3fr; gap: 16px; align-items: start; }
+  .set-path { margin-top: 6px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; font-size: 12px; overflow-wrap: anywhere; }
+  .set-danger { border-color: color-mix(in srgb, var(--bad) 35%, var(--border)); margin-top: 4px; }
+  .set-danger h2 { color: var(--bad); }
+  @media (max-width: 1100px) { .set-cols { grid-template-columns: 1fr; } }
+  .cad-status { display: flex; flex-direction: column; gap: 2px; padding: 12px 16px; border-radius: 10px; margin-bottom: 16px; font-size: 13px; }
+  .cad-status b { font-size: 14px; }
+  .cad-status.on { background: var(--ok-bg); color: var(--ok); }
+  .cad-status.off { background: var(--warn-bg); color: var(--warn); }
+  .cad-add { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; padding: 16px 18px; margin-bottom: 20px; }
+  .cad-add label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+  .cad-add-addr { flex: 2; min-width: 240px; } .cad-add-name { flex: 1; min-width: 180px; }
+  .cad-add .field { width: 100%; }
+  .cad-list { overflow: hidden; }
+  .cad-row { display: flex; align-items: center; gap: 14px; padding: 12px 18px; border-top: 1px solid var(--border); }
+  .cad-row:first-child { border-top: 0; }
+  .cad-row:hover { background: var(--info-bg); }
+  .cad-avatar { flex-shrink: 0; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: 14px; background: var(--info-bg); color: var(--accent); }
+  .cad-avatar.domain { background: var(--neutral-bg); color: var(--muted); }
+  .cad-who { flex: 1; min-width: 0; }
+  .cad-name { font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cad-addr { font-size: 12px; overflow-wrap: anywhere; }
+  .cad-added { font-size: 12px; white-space: nowrap; }
+  @media (max-width: 600px) { .cad-added { display: none; } }
+  .file-cell { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .file-ico { flex-shrink: 0; width: 36px; height: 36px; border-radius: 8px; display: grid; place-items: center; background: var(--info-bg); color: var(--accent); }
+  .file-ico.bad { background: var(--bad-bg); color: var(--bad); }
+  .file-ico .ico { width: 18px; height: 18px; }
+  .file-txt { min-width: 0; } .file-name { font-weight: 600; max-width: 380px; } .file-sub { font-size: 12px; }
+  .inv-table td { vertical-align: middle; }
+  .inv-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .fact { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; min-width: 0; }
+  .fact .k { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .fact .v { font-size: 17px; font-weight: 600; margin-top: 4px; overflow-wrap: anywhere; }
+  .fact .v.empty { color: var(--muted); font-weight: 400; }
+  .inv-reason { padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; font-size: 13px; background: var(--info-bg); color: var(--info); }
+  .inv-reason.warn { background: var(--warn-bg); color: var(--warn); }
+  .inv-missing { font-size: 12px; margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border); }
+  .inv-h3 { margin: 18px 0 8px; font-size: 13px; }
+  .inv-detail { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+  .inv-aside .panel:last-child, .inv-main .panel:last-child { margin-bottom: 0; }
+  .inv-source { grid-template-columns: 1fr; gap: 12px; }
+  .inv-aside .chat { max-height: 420px; }
+  @media (max-width: 1100px) { .inv-detail { grid-template-columns: 1fr; } }
+  .mail-head { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-bottom: 1px solid var(--border); font-size: 13px; background: var(--neutral-bg); }
+  .mail-head .sel-col, .mail-card .sel-col { display: flex; align-items: center; }
+  .mail-list { display: flex; flex-direction: column; }
+  .mail-card { display: flex; align-items: flex-start; gap: 14px; padding: 16px 18px; border-top: 1px solid var(--border); }
+  .mail-card:first-child { border-top: 0; }
+  .mail-card.click { cursor: pointer; }
+  .mail-card:hover { background: var(--neutral-bg); }
+  .mail-card.selected { background: var(--info-bg); }
+  .mail-card .sel-col { padding-top: 10px; }
+  .mail-avatar { flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: 14px; background: var(--info-bg); color: var(--accent); }
+  .mail-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .mail-top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+  .mail-from { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mail-from .mono { font-size: 12px; }
+  .mail-time { font-size: 12px; white-space: nowrap; flex-shrink: 0; }
+  .mail-subject { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+  .mail-verdict { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
+  .mail-reason { font-size: 12px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; min-width: 0; }
+  .mail-files { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+  .mail-file { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); width: fit-content; max-width: 100%; }
+  .mail-file-link { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 340px; color: var(--fg); font-weight: 500; }
+  .mail-file-link:hover { color: var(--accent); text-decoration: none; }
+  .mail-file-link .ico { color: var(--muted); }
+  .mail-reparse { padding: 4px 6px; }
+  .mail-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .mail-ids { font-size: 12px; }
+  @media (max-width: 700px) { .mail-avatar, .mail-ids { display: none; } .mail-top { flex-direction: column; gap: 0; } }
+  .status-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--border); background: var(--panel); border-radius: 999px; font-size: 13px; color: var(--fg); }
+  a.status-pill { color: var(--accent); } a.status-pill:hover { text-decoration: none; border-color: var(--accent); }
+  .status-pill .dot { margin-right: 0; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 20px; }
+  .stat { display: flex; align-items: center; gap: 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; min-width: 0; }
+  .stat.alert-on { border-color: color-mix(in srgb, var(--bad) 45%, var(--border)); }
+  .stat-ico { flex-shrink: 0; width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; }
+  .stat-ico svg { width: 22px; height: 22px; }
+  .stat-ico.info { background: var(--info-bg); color: var(--info); } .stat-ico.ok { background: var(--ok-bg); color: var(--ok); }
+  .stat-ico.warn { background: var(--warn-bg); color: var(--warn); } .stat-ico.bad { background: var(--bad-bg); color: var(--bad); }
+  .stat-ico.neutral { background: var(--neutral-bg); color: var(--muted); }
+  .stat .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
+  .stat .value { font-size: 28px; font-weight: 700; line-height: 1.15; }
+  .stat .hint { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+  .clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .act-fail { font-size: 12px; margin-top: 6px; display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+  .act-fail .clamp2 { flex: 1; min-width: 200px; }
+  .doc-sum { padding: 4px 0; } .doc-sum + .doc-sum { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 8px; }
+  .doc-line { display: flex; align-items: center; gap: 6px; }
+  .doc-name { max-width: 240px; font-weight: 500; }
+  .goods-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; padding: 14px 18px; border-top: 1px solid var(--border); }
+  .goods-form:first-child { border-top: 0; }
+  .goods-name { min-width: 130px; flex: 0 0 130px; display: flex; flex-direction: column; gap: 2px; align-self: center; }
+  .goods-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; flex: 1; min-width: 110px; }
+  .goods-field .field { width: 100%; }
+  .goods-actions { display: flex; gap: 8px; align-items: center; }
+  .goods-when { flex-basis: 100%; font-size: 12px; margin-top: -4px; padding-left: 142px; }
+  @media (max-width: 800px) { .goods-name { flex-basis: 100%; } .goods-when { padding-left: 0; } }
+  .inv-range { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; }
+  .inv-range-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  button.chip { font: inherit; font-size: 13px; cursor: pointer; }
+  button.chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .inv-range-dates { display: flex; align-items: center; gap: 8px; }
+  .inv-range-dates .field { flex: 1; min-width: 0; padding: 6px 8px; }
+  #inv-table { display: none; flex: 1; min-height: 0; flex-direction: column; }
+  .inv-view.table-mode #inv-table { display: flex; }
+  #inv-table .table-wrap { flex: 1; min-height: 0; overflow: auto; }
+  .inv-view.table-mode #inv-frame { display: none; }
+  .inv-table-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .inv-table-head .grow { flex: 1; min-width: 200px; }
+  .inv-combined th { position: sticky; top: 0; background: var(--neutral-bg); z-index: 1; }
+  .inv-combined tr.day-first td { border-top: 2px solid var(--border); }
+  .inv-combined tbody tr:first-child td { border-top: 0; }
+  .wa-banner { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-radius: 12px; margin-bottom: 16px; border: 1px solid transparent; }
+  .wa-banner.ok { background: var(--ok-bg); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 25%, transparent); }
+  .wa-banner.bad { background: var(--bad-bg); color: var(--bad); border-color: color-mix(in srgb, var(--bad) 25%, transparent); }
+  .wa-ico { flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 18px; color: #fff; }
+  .wa-banner.ok .wa-ico { background: var(--ok); } .wa-banner.bad .wa-ico { background: var(--bad); }
+  .wa-text { flex: 1; min-width: 0; } .wa-text b { font-size: 15px; } .wa-text div { font-size: 13px; margin-top: 2px; word-break: break-word; }
+  .wa-text a { color: inherit; text-decoration: underline; }
+  .wa-grid { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; align-items: start; margin-bottom: 0; }
+  @media (max-width: 800px) { .wa-grid { grid-template-columns: 1fr; } }
+  .msg-text { white-space: pre-wrap; max-height: 7.5em; overflow: auto; min-width: 260px; }
+  .inv-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .inv-side .chips { margin-bottom: 0; }
+  .inv-side .dd, .inv-side .dd-btn { width: 100%; min-width: 0; }
+  .inv-side .inv-list > h2 { display: none; }  /* the drop-down above already names the firm and counts its reports */
+  .inv-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .inv-actions .grow { grid-column: 1 / -1; font-weight: 600; font-size: 14px; line-height: 1.3; overflow-wrap: anywhere; }
+  .inv-actions .btn { justify-content: center; text-align: center; padding: 8px 6px; font-size: 13px; white-space: nowrap; }
+  .inv-actions .btn[hidden] { display: none; }
+  #inv-frame { border-radius: 12px; }
   /* On a wide screen the Stock Reports page fills the window: the page itself never scrolls, only the list does. */
   @media (min-width: 801px) {
-    main.fit { height: 100vh; overflow: hidden; display: flex; flex-direction: column; padding-bottom: 20px; }
-    main.fit header.page, main.fit .chips { margin-bottom: 12px; flex-shrink: 0; }
-    main.fit .inv { flex: 1; min-height: 0; }
+    main.fit { height: 100vh; overflow: hidden; display: flex; flex-direction: column; padding: 0; }
+    main.fit .inv { flex: 1; min-height: 0; gap: 0; align-items: stretch; }
+    main.fit .inv-side { padding: 16px 16px 16px 24px; min-height: 0; }
+    main.fit .inv-side .inv-list { flex: 1; height: auto; min-height: 0; }
+    main.fit .inv-view { border-width: 0 0 0 1px; border-radius: 0; }
+    main.fit #inv-frame { border-radius: 0; }
     main.fit .inv-list, main.fit .inv-view { height: 100%; max-height: none; margin-bottom: 0; position: static; }
     main.fit .inv-list { overflow: auto; }
     main.fit .inv-list:not(.active) { display: none; }
@@ -214,8 +375,12 @@
   .modal-actions button:disabled { opacity: .45; cursor: not-allowed; }
   @keyframes modal-fade { from { opacity: 0; } to { opacity: 1; } }
   @keyframes modal-pop { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
-  .toast { position: fixed; bottom: 80px; right: 20px; background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; }
-  .toast.show { opacity: 1; }
+  .toast { position: fixed; top: 20px; right: 20px; width: max-content; max-width: min(380px, calc(100vw - 40px)); background: var(--fg); color: var(--bg); padding: 12px 16px; border-radius: 8px; border-left: 4px solid transparent; font-size: 14px; line-height: 1.4; box-shadow: 0 8px 24px rgba(0,0,0,.25); opacity: 0; transform: translateY(-8px); transition: opacity .2s, transform .2s; pointer-events: none; z-index: 1000; }
+  .toast.show { opacity: 1; transform: none; pointer-events: auto; display: flex; align-items: flex-start; gap: 12px; }
+  .toast-msg { flex: 1; }
+  .toast-x { background: none; border: 0; color: inherit; opacity: .65; cursor: pointer; font-size: 14px; line-height: 1; padding: 2px 0 0; }
+  .toast-x:hover { opacity: 1; }
+  .toast.warn { border-left-color: #f59e0b; }
 
   @media (max-width: 800px) {
     .layout { flex-direction: column; }
@@ -244,7 +409,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>
         Emails <span class="count" id="count-emails" hidden></span></a>
       <a href="#invoices" data-tab="invoices">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h14a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v4"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m3 15 2 2 4-4"/></svg>
         Extracted data</a>
       <a href="#whatsapp" data-tab="whatsapp">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.4 8.4 0 0 1-12.3 7.4L3 21l2.1-5.6A8.4 8.4 0 1 1 21 11.5z"/></svg>
@@ -255,6 +420,9 @@
       <a href="#formats" data-tab="formats">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
         Report formats</a>
+      <a href="#factories" data-tab="factories">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z"/><path d="M17 18h1M12 18h1M7 18h1"/></svg>
+        Factories</a>
       <a href="#cad" data-tab="cad">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg>
         CAD</a>
@@ -287,9 +455,11 @@ async function api(path, opts = {}) {
   return body;
 }
 
-function toast(msg) {
-  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
-  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 3000);
+function toast(msg, ms = 3000, kind = "") {
+  const t = $("#toast");
+  t.innerHTML = `<span class="toast-msg">${esc(msg)}</span><button type="button" class="toast-x" aria-label="Dismiss" onclick="this.parentNode.classList.remove('show')">✕</button>`;
+  t.className = "toast show " + kind;
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), ms);
 }
 
 const fmtTime = (iso) => iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "—";
@@ -312,6 +482,7 @@ const STATUS = {
   UNKNOWN_BANK: ["Unknown bank", "warn"],
   SEND_FAILED: ["WhatsApp failed", "bad"],
   STATEMENT: ["Statement · not tracked", ""],
+  MERGED: ["Figures added", "info"],
   NOT_BANK: ["Not a bank document", ""],
 };
 const VERDICT = { bank: ["Bank", "ok"], not_bank: ["Not bank", ""], unsure: ["Unsure", "warn"] };
@@ -347,7 +518,13 @@ function pageHeader(title, sub, actions = "") {
   return `<header class="page"><div><h1>${esc(title)}</h1>${sub ? `<div class="sub">${sub}</div>` : ""}</div><div class="actions">${actions}</div></header>`;
 }
 const syncButton = `<button class="primary" data-action="sync">↻ Check Gmail now</button>`;
-const clearButton = (scope, label) => `<button class="danger" data-action="clear" data-scope="${scope}">🗑 ${esc(label)}</button>`;
+const ICON = {
+  trash: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="m19 6-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>`,
+  file: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg>`,
+  refresh: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-15-6.7L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 15 6.7l3-2.7"/><path d="M16 16h5v5"/></svg>`,
+  mail: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>`,
+};
+const clearButton = (scope, label) => `<button class="danger" data-action="clear" data-scope="${scope}">${ICON.trash} ${esc(label)}</button>`;
 
 /* ---------- Our own confirmation dialog (instead of the browser's) ---------- */
 // body is HTML built here, with every name passed through esc(). Resolves true / false.
@@ -357,7 +534,7 @@ function askDialog({ title, body, confirmLabel = "Delete", danger = true, typeWo
     const wrap = document.createElement("div");
     wrap.className = "modal-backdrop";
     wrap.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-      <div class="modal-icon ${danger ? "bad" : ""}">${danger ? "🗑" : "ℹ️"}</div>
+      <div class="modal-icon ${danger ? "bad" : ""}">${danger ? ICON.trash : "ℹ️"}</div>
       <h3 id="modal-title">${esc(title)}</h3>
       <div class="modal-body">${body}</div>
       ${typeWord ? `<label class="modal-type">Type <b>${esc(typeWord)}</b> to confirm<input type="text" autocomplete="off" spellcheck="false" placeholder="${esc(typeWord)}"></label>` : ""}
@@ -381,7 +558,7 @@ function askDialog({ title, body, confirmLabel = "Delete", danger = true, typeWo
 }
 
 /* ---------- Ticking rows to delete several at once ---------- */
-const sel = { emails: new Set(), invoices: new Set() };
+const sel = { emails: new Set(), invoices: new Set(), messages: new Set() };
 const selBox = (kind, id) => `<input type="checkbox" class="sel" data-sel="${kind}" data-id="${id}" aria-label="Select">`;
 const selAll = (kind) => `<input type="checkbox" class="sel-all" data-sel-all="${kind}" aria-label="Select all">`;
 
@@ -390,9 +567,10 @@ function updateSelBar() {
   const parts = [];
   if (sel.emails.size) parts.push(`${sel.emails.size} email${sel.emails.size > 1 ? "s" : ""}`);
   if (sel.invoices.size) parts.push(`${sel.invoices.size} file${sel.invoices.size > 1 ? "s" : ""}`);
+  if (sel.messages.size) parts.push(`${sel.messages.size} message${sel.messages.size > 1 ? "s" : ""}`);
   bar.hidden = !parts.length;
   if (parts.length) bar.innerHTML = `<span><b>${esc(parts.join(" + "))}</b> selected</span>
-    <button class="danger-solid" data-action="delete-selected">🗑 Delete selected</button>
+    <button class="danger-solid" data-action="delete-selected">${ICON.trash} Delete selected</button>
     <button data-action="clear-selection">Clear</button>`;
 }
 
@@ -402,9 +580,9 @@ function applySelection() {
     const boxes = [...document.querySelectorAll(`input.sel[data-sel="${kind}"]`)];
     const present = new Set(boxes.map((b) => b.dataset.id));
     for (const id of [...sel[kind]]) if (!present.has(id)) sel[kind].delete(id);
-    boxes.forEach((b) => { b.checked = sel[kind].has(b.dataset.id); b.closest("tr")?.classList.toggle("selected", b.checked); });
+    boxes.forEach((b) => { b.checked = sel[kind].has(b.dataset.id); b.closest("tr, .mail-card")?.classList.toggle("selected", b.checked); });
     document.querySelectorAll(`input.sel-all[data-sel-all="${kind}"]`).forEach((h) => {
-      const mine = boxes.filter((b) => h.closest("table")?.contains(b));
+      const mine = boxes.filter((b) => h.closest("table, .sel-scope")?.contains(b));
       h.checked = mine.length > 0 && mine.every((b) => b.checked);
       h.indeterminate = !h.checked && mine.some((b) => b.checked);
     });
@@ -418,7 +596,7 @@ document.addEventListener("change", (ev) => {
     sel[t.dataset.sel][t.checked ? "add" : "delete"](t.dataset.id);
   } else if (t.matches("input.sel-all")) {
     const kind = t.dataset.selAll;
-    t.closest("table").querySelectorAll(`input.sel[data-sel="${kind}"]`).forEach((b) => sel[kind][t.checked ? "add" : "delete"](b.dataset.id));
+    t.closest("table, .sel-scope").querySelectorAll(`input.sel[data-sel="${kind}"]`).forEach((b) => sel[kind][t.checked ? "add" : "delete"](b.dataset.id));
   } else return;
   t.blur();  // a focused field would pause the page's live refresh
   applySelection();
@@ -501,15 +679,15 @@ function docSummary(d) {
   const amount = d.amount ? `${d.currency || "PKR"} ${Number(d.amount).toLocaleString()}` : null;
   const what = d.kind === "statement" ? `Statement · ${d.transactions} transactions`
     : [d.document_type, d.reference && `Ref ${d.reference}`, amount].filter(Boolean).join(" · ");
-  return `<div><a href="#invoice/${d.id}">${esc(d.filename)}</a> ${statusBadge(d.status)}${needsFormatBadge(d.needs_format)}</div>${what ? `<div class="muted" style="font-size:12px">${esc(what)}</div>` : ""}`;
+  const busy = parsing.has(String(d.id));
+  return `<div class="doc-sum"><div class="doc-line"><a class="doc-name ellipsis" href="#invoice/${d.id}" title="${esc(d.filename)}">${esc(d.filename)}</a>
+    <button class="icon mail-reparse" ${busy ? "disabled" : `data-action="reparse" data-id="${d.id}" data-status="${esc(d.status)}"`} title="${busy ? "Parsing…" : `Read file #${d.id} again`}">${busy ? `<span class="spin"></span>` : ICON.refresh}</button></div>
+    <div>${statusBadge(d.status)}${needsFormatBadge(d.needs_format)}</div>${what ? `<div class="muted" style="font-size:12px">${esc(what)}</div>` : ""}</div>`;
 }
 
 // The serial number of each extracted file (the "#" of the Extracted data table).
 const serials = (docs) => docs.map((d) => `<div><a href="#invoice/${d.id}"><b>#${d.id}</b></a></div>`).join("") || `<span class="muted">—</span>`;
-const deleteEmailButton = (e, docs = e.documents || e.invoices || []) => `${docs.map((d) => parsing.has(String(d.id))
-  ? `<button class="icon" disabled title="Parsing file #${d.id}"><span class="spin"></span> Parsing…</button>`
-  : `<button class="icon" data-action="reparse" data-id="${d.id}" data-status="${esc(d.status)}" title="Read file #${d.id} again">↻ Re-parse${docs.length > 1 ? " #" + d.id : ""}</button>`).join(" ")}
-  <button class="icon danger" data-action="delete-email" data-id="${e.id}" data-name="${esc(e.subject || "(no subject)")}" title="Delete this email and its extracted data">🗑</button>`;
+const deleteEmailButton = (e) => `<button class="icon danger" data-action="delete-email" data-id="${e.id}" data-name="${esc(e.subject || "(no subject)")}" title="Delete this email and its extracted data">${ICON.trash}</button>`;
 
 const SELECTION = {
   selected: ["Selected", "ok"],
@@ -539,9 +717,9 @@ function activityPanel(all, pubsubState, filter) {
       <td><div><b>${esc(e.subject || "(no subject)")}</b></div><div class="muted" style="font-size:12px">${esc(s.name)}${e.attachments.length ? " · 📎 " + esc(e.attachments.join(", ")) : ""}</div></td>
       <td>${selectionBadge(e.selection)}</td>
       <td><div class="steps">${progressSteps(e).join("")}</div>
-        ${e.stage === "failed" ? `<div class="debit" style="font-size:12px;margin-top:4px">${esc(e.stage_detail)} <button class="icon" data-action="retry" data-id="${e.id}">↻ Retry</button></div>`
+        ${e.stage === "failed" ? `<div class="debit act-fail"><span class="clamp2" title="${esc(e.stage_detail)}">${esc(e.stage_detail)}</span> <button class="icon" data-action="retry" data-id="${e.id}">${ICON.refresh} Retry</button></div>`
           : ACTIVE_STAGES.includes(e.stage) && e.stage_detail ? `<div class="muted" style="font-size:12px;margin-top:4px">${esc(e.stage_detail)}</div>`
-          : reason ? `<div class="muted" style="font-size:12px;margin-top:4px">Why: ${esc(reason)}</div>` : ""}</td>
+          : reason ? `<div class="muted act-fail"><span class="clamp2" title="${esc(reason)}">Why: ${esc(reason)}</span></div>` : ""}</td>
       <td>${e.documents.map(docSummary).join("") || `<span class="muted">—</span>`}</td>
       <td>${deleteEmailButton(e)}</td>
     </tr>`;
@@ -567,54 +745,85 @@ const views = {
     const out = o.whatsapp_out;
     const sentTotal = Object.values(out).reduce((a, b) => a + b, 0);
     const wa = s.whatsapp.openwa;
+    const waOk = wa ? wa.status === "ready" : s.whatsapp.provider === "meta";
+    const listening = s.gmail.pubsub.state === "listening";
+    const problems = inv.FAILED_PARSE + inv.SEND_FAILED + tx.SEND_FAILED + inv.UNKNOWN_BANK;
+    const I = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+    const stat = (tone, icon, label, value, hint, extra = "") => `<div class="stat ${extra}"><div class="stat-ico ${tone}">${icon}</div>
+      <div><div class="label">${label}</div><div class="value">${value}</div><div class="hint">${hint}</div></div></div>`;
+    const pill = (dot, html) => `<span class="status-pill">${dot ? `<span class="dot ${dot}"></span>` : ""}${html}</span>`;
     return pageHeader("Overview", "Emails in → PDF extracted → WhatsApp confirmation → Google Sheet", syncButton) + `
-      <div class="cards">
-        <div class="card"><div class="label">Emails fetched</div><div class="value">${o.emails}</div><div class="hint">with PDF attachments</div></div>
-        <div class="card"><div class="label">Awaiting reply</div><div class="value">${inv.PENDING_CONFIRMATION + tx.PENDING_CONFIRMATION}</div><div class="hint">${tx.PENDING_CONFIRMATION} statement rows</div></div>
-        <div class="card"><div class="label">Saved to sheet</div><div class="value">${inv.CONFIRMED + tx.CONFIRMED}</div><div class="hint">${inv.REJECTED + tx.REJECTED} skipped</div></div>
-        <div class="card"><div class="label">Problems</div><div class="value">${inv.FAILED_PARSE + inv.SEND_FAILED + tx.SEND_FAILED + inv.UNKNOWN_BANK}</div><div class="hint">${inv.FAILED_PARSE} parse · ${inv.SEND_FAILED + tx.SEND_FAILED} send · ${inv.UNKNOWN_BANK} unknown bank</div></div>
-        <div class="card"><div class="label">WhatsApp sent</div><div class="value">${sentTotal}</div><div class="hint">${out.delivered || 0} delivered · ${out.read || 0} read · ${out.failed || 0} failed</div></div>
+      <div class="status-strip">
+        ${pill(s.gmail.initialized ? "ok" : "warn", `Gmail <span class="muted">${s.gmail.initialized ? esc(ago(s.gmail.last_sync_at)) : "not started"}</span>`)}
+        ${pill(waOk ? "ok" : "bad", `WhatsApp <span class="muted">${wa ? `${esc(wa.status)}${wa.phone ? " · +" + esc(wa.phone) : ""}` : esc(s.whatsapp.provider)}</span>`)}
+        ${pill(listening ? "ok" : "warn", listening ? "Instant mail detection" : `Checking every ${Math.round(s.gmail.reconcile_interval_seconds / 60)} min`)}
+        ${pill("", `Prompts go to <b>${esc(s.whatsapp.notify_numbers.join(", ") || "not set")}</b>`)}
+        ${s.sheets.url ? `<a class="status-pill" href="${esc(s.sheets.url)}" target="_blank" rel="noopener">Open Google Sheet ↗</a>` : ""}
+      </div>
+      <div class="stats">
+        ${stat("info", I('<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>'), "Emails fetched", o.emails, "with PDF attachments")}
+        ${stat("warn", I('<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>'), "Awaiting reply", inv.PENDING_CONFIRMATION + tx.PENDING_CONFIRMATION, `${tx.PENDING_CONFIRMATION} statement rows`)}
+        ${stat("ok", I('<circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/>'), "Saved to sheet", inv.CONFIRMED + tx.CONFIRMED, `${inv.REJECTED + tx.REJECTED} skipped`)}
+        ${stat(problems ? "bad" : "neutral", I('<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>'), "Problems", problems, `${inv.FAILED_PARSE} parse · ${inv.SEND_FAILED + tx.SEND_FAILED} send · ${inv.UNKNOWN_BANK} unknown bank`, problems ? "alert-on" : "")}
+        ${stat("ok", I('<path d="M21 11.5a8.4 8.4 0 0 1-12.3 7.4L3 21l2.1-5.6A8.4 8.4 0 1 1 21 11.5z"/>'), "WhatsApp sent", sentTotal, `${out.delivered || 0} delivered · ${out.read || 0} read · ${out.failed || 0} failed`)}
       </div>
       ${activityPanel(act, s.gmail.pubsub.state, filter)}
-      <div class="panel"><h2>System status</h2><div class="panel-body kv">
-        <div><div class="k">Gmail last sync</div><div class="v">${s.gmail.initialized ? esc(ago(s.gmail.last_sync_at)) : "not started"}</div></div>
-        <div><div class="k">New mail detection</div><div class="v">${s.gmail.pubsub.state === "listening" ? `<span class="badge ok">Instant (Pub/Sub)</span>` : `<span class="badge warn">Fallback: every ${Math.round(s.gmail.reconcile_interval_seconds / 60)} min</span>`}</div>${s.gmail.pubsub.state !== "listening" && s.gmail.pubsub.detail ? `<div class="muted" style="font-size:12px">${esc(s.gmail.pubsub.detail)}</div>` : ""}</div>
-        <div><div class="k">WhatsApp</div><div class="v">${wa ? `${esc(wa.status)}${wa.phone ? " · +" + esc(wa.phone) : ""}` : esc(s.whatsapp.provider)}</div></div>
-        <div><div class="k">Prompts go to</div><div class="v">${esc(s.whatsapp.notify_numbers.join(", ") || "not set")}</div></div>
-        <div><div class="k">Google Sheet</div><div class="v">${s.sheets.url ? `<a href="${esc(s.sheets.url)}" target="_blank" rel="noopener">Open sheet ↗</a>` : "not configured"}</div></div>
-      </div></div>
       <div class="panel"><h2>Latest extracted PDFs <a class="right" href="#invoices">View all →</a></h2>
-        ${invoiceTable(o.recent_invoices)}
+        ${o.recent_invoices.length ? invoiceTable(o.recent_invoices) : `<div class="empty-state">Nothing extracted yet.</div>`}
       </div>`;
   },
 
-  async emails() {
-    const emails = await api("/emails");
-    const rows = emails.map((e) => {
+  async emails(filter) {
+    const all = await api("/emails");
+    const tests = {
+      bank: (e) => e.classification === "bank",
+      other: (e) => e.classification === "not_bank",
+      failed: (e) => e.invoices.some((i) => ["FAILED_PARSE", "SEND_FAILED"].includes(i.status)),
+    };
+    const emails = tests[filter] ? all.filter(tests[filter]) : all;
+    const chips = [["", "All", all.length], ["bank", "Bank documents", all.filter(tests.bank).length], ["other", "Not bank", all.filter(tests.other).length], ["failed", "Failed", all.filter(tests.failed).length]];
+    const initials = (name) => (name || "?").replace(/[^\p{L}\p{N} ]/gu, "").trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
+    const cards = emails.map((e) => {
       const s = senderName(e.sender);
-      return `<tr class="click" data-href="${e.invoices[0] ? "#invoice/" + e.invoices[0].id : ""}">
-        <td class="sel-col">${selBox("emails", e.id)}</td>
-        <td class="nowrap">${serials(e.invoices)}</td>
-        <td class="nowrap">${esc(fmtTime(e.received_at))}</td>
-        <td><div>${esc(s.name)}</div><div class="muted mono">${esc(s.addr)}</div></td>
-        <td>${esc(e.subject)}</td>
-        <td>${verdictBadge(e.classification)}${e.bank_name ? ` <b>${esc(e.bank_name)}</b>` : ""}${e.classification_reason ? `<div class="muted" style="font-size:12px">${esc(e.classification_reason)}</div>` : ""}</td>
-        <td>${e.invoices.map((i) => `<div><a href="#invoice/${i.id}">${esc(i.pdf_filename.replace(/^[^_]+_/, ""))}</a></div><div>${statusBadge(i.status)}${needsFormatBadge(i.needs_format)} <span class="badge">${esc(i.bank_code)}</span></div>`).join("") || `<span class="muted">—</span>`}</td>
-        <td>${deleteEmailButton(e)}</td>
-      </tr>`;
-    }).join("");
-    return pageHeader("Emails", "Every inbox email with a PDF / Excel attachment. The LLM decides whether it's bank-related; only those go on to WhatsApp.",
-      syncButton + (emails.length ? clearButton("emails", "Delete all emails") : "")) + `
-      <div class="panel">${emails.length ? `<div class="table-wrap"><table>
-        <thead><tr><th class="sel-col">${selAll("emails")}</th><th>#</th><th>Received</th><th>From</th><th>Subject</th><th>LLM verdict</th><th>File / status</th><th></th></tr></thead>
-        <tbody>${rows}</tbody></table></div>` : `<div class="empty-state">No emails fetched yet. New inbox emails with a PDF attachment will show up here.</div>`}
+      const files = e.invoices.map((i) => {
+        const name = i.pdf_filename.replace(/^[^_]+_/, "");
+        const busy = parsing.has(String(i.id));
+        return `<div class="mail-file"><a class="mail-file-link" href="#invoice/${i.id}" title="${esc(name)}">${ICON.file}<span class="ellipsis">${esc(name === "email_body.txt" ? "Email body" : name)}</span></a>
+          ${statusBadge(i.status)}${needsFormatBadge(i.needs_format)}
+          <button class="icon mail-reparse" ${busy ? "disabled" : `data-action="reparse" data-id="${i.id}" data-status="${esc(i.status)}"`} title="${busy ? "Parsing…" : `Read file #${i.id} again`}">${busy ? `<span class="spin"></span>` : ICON.refresh}</button></div>`;
+      }).join("");
+      return `<div class="mail-card${e.invoices[0] ? " click" : ""}" data-href="${e.invoices[0] ? "#invoice/" + e.invoices[0].id : ""}">
+        <div class="sel-col">${selBox("emails", e.id)}</div>
+        <div class="mail-avatar">${esc(initials(s.name))}</div>
+        <div class="mail-main">
+          <div class="mail-top"><div class="mail-from"><b>${esc(s.name)}</b>${s.addr ? ` <span class="muted mono">${esc(s.addr)}</span>` : ""}</div>
+            <div class="muted mail-time" title="${esc(fmtTime(e.received_at))}">${esc(ago(e.received_at))} · ${esc(fmtTime(e.received_at))}</div></div>
+          <div class="mail-subject">${esc(e.subject || "(no subject)")}</div>
+          ${e.classification || e.classification_reason ? `<div class="mail-verdict">${e.classification ? verdictBadge(e.classification) : ""}${e.bank_name ? `<b>${esc(e.bank_name)}</b>` : ""}${e.classification_reason ? `<span class="mail-reason muted" title="${esc(e.classification_reason)}">${esc(e.classification_reason)}</span>` : ""}</div>` : ""}
+          ${files ? `<div class="mail-files">${files}</div>` : ""}
+        </div>
+        <div class="mail-actions"><span class="muted mail-ids">${e.invoices.map((i) => "#" + i.id).join(" ")}</span>
+          <button class="icon danger" data-action="delete-email" data-id="${e.id}" data-name="${esc(e.subject || "(no subject)")}" title="Delete this email and its extracted data">${ICON.trash}</button></div>
       </div>`;
+    }).join("");
+    return pageHeader("Emails", "Every inbox email with a PDF / Excel attachment. The AI decides whether it's bank-related; only those go on to WhatsApp.",
+      syncButton + (all.length ? clearButton("emails", "Delete all emails") : "")) + `
+      <div class="chips">${chips.map(([v, l, n]) => `<a class="chip ${(filter || "") === v ? "active" : ""}" href="#emails${v ? "/" + v : ""}">${esc(l)} <span>${n}</span></a>`).join("")}</div>
+      ${emails.length ? `<div class="panel sel-scope">
+        <div class="mail-head"><div class="sel-col">${selAll("emails")}</div><span class="muted">Select all · ${emails.length} email${emails.length === 1 ? "" : "s"}</span></div>
+        <div class="mail-list">${cards}</div></div>`
+        : `<div class="panel"><div class="empty-state">${all.length ? "No emails match this filter." : "No emails fetched yet. New inbox emails with a PDF attachment will show up here."}</div></div>`}`;
   },
 
-  async invoices() {
-    const list = await api("/invoices");
-    return pageHeader("Extracted data", "What was read from each PDF attachment", syncButton + (list.length ? clearButton("extracted", "Delete all extracted data") : "")) +
-      `<div class="panel">${list.length ? invoiceTable(list) : `<div class="empty-state">Nothing extracted yet.</div>`}</div>`;
+  async invoices(filter) {
+    const all = await api("/invoices");
+    const groups = { saved: ["CONFIRMED"], waiting: ["PENDING_CONFIRMATION"], failed: ["FAILED_PARSE", "SEND_FAILED"], skipped: ["REJECTED", "NOT_BANK", "STATEMENT", "UNKNOWN_BANK", "MERGED"] };
+    const of = (k) => all.filter((i) => groups[k].includes(i.status));
+    const list = groups[filter] ? of(filter) : all;
+    const chips = [["", "All", all.length], ["saved", "Saved to sheet", of("saved").length], ["waiting", "Awaiting reply", of("waiting").length], ["failed", "Failed", of("failed").length], ["skipped", "Skipped", of("skipped").length]];
+    return pageHeader("Extracted data", "What was read from each PDF attachment", syncButton + (all.length ? clearButton("extracted", "Delete all extracted data") : "")) +
+      `<div class="chips">${chips.map(([v, l, n]) => `<a class="chip ${(filter || "") === v ? "active" : ""}" href="#invoices${v ? "/" + v : ""}">${esc(l)} <span>${n}</span></a>`).join("")}</div>
+      <div class="panel">${list.length ? invoiceTable(list) : `<div class="empty-state">${all.length ? "Nothing with this status." : "Nothing extracted yet."}</div>`}</div>`;
   },
 
   async invoice(id) {
@@ -651,40 +860,48 @@ const views = {
             <td class="num debit">${money(r.debit)}</td><td class="num credit">${money(r.credit)}</td><td class="num">${money(r.balance)}</td></tr>`).join("")}
           </tbody></table></div></div>`;
     } else {
-      summaryHtml = `<div class="panel"><h2>Extracted fields <span class="right">${esc(inv.extra?.extraction_method || "")} ${inv.extra?.llm_model ? "· " + esc(inv.extra.llm_model) : ""}</span></h2><div class="panel-body">
-        ${content.kind === "pdf_scanned" ? `<div class="alert info">Scanned PDF (no text layer): the LLM read the page images directly.</div>` : ""}
-        ${inv.extra?.classification_reason ? `<div class="alert ${inv.status === "NOT_BANK" ? "warn" : "info"}">${inv.status === "NOT_BANK" ? "Rejected" : "Selected"}: ${esc(inv.extra.classification_reason)}</div>` : ""}
-        <div class="kv">${field("Issued by (letterhead)", inv.extra?.issuer_name)}${field("Reference", inv.reference_number)}${field("Date", inv.txn_date)}${field("Amount", inv.amount ? `${inv.extra?.currency || ""} ${inv.amount}`.trim() : null)}
-        ${field("From (payer)", inv.sender_name)}${field("From account", inv.extra?.sender_account)}${field("To (payee)", inv.receiver_name)}${field("To account", inv.extra?.receiver_account)}
-        ${field("Purpose", inv.extra?.purpose)}${field("Document type", inv.extra?.document_type)}${field("Bank (as read)", inv.extra?.bank_name)}
-        ${inv.extra?.amount_sanity_check && inv.extra.amount_sanity_check !== "no_regex_match" ? field("Amount check", inv.extra.amount_sanity_check) : ""}</div>
-        ${inv.extra?.items_table?.rows?.length ? `<h3 style="margin:18px 0 8px;font-size:13px">Items in the document (${inv.extra.items_table.rows.length})</h3>
-          <div class="table-wrap"><table><thead><tr>${(inv.extra.items_table.columns || []).map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
-          <tbody>${inv.extra.items_table.rows.map((r) => `<tr>${r.map((v) => `<td>${esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : ""}
-        ${(inv.extra?.document_details || []).map((d) => `<h3 style="margin:18px 0 8px;font-size:13px">${esc(d.document || "Document")}</h3>
+      const x = inv.extra || {};
+      const amount = inv.amount ? `${x.currency || ""} ${inv.amount}`.trim() : null;
+      const fact = (k, v, mono) => `<div class="fact"><div class="k">${esc(k)}</div><div class="v ${v ? (mono ? "mono" : "") : "empty"}">${v ? esc(v) : "—"}</div></div>`;
+      const detail = [["Issued by (letterhead)", x.issuer_name], ["From (payer)", inv.sender_name], ["From account", x.sender_account], ["To (payee)", inv.receiver_name], ["To account", x.receiver_account],
+        ["Purpose", x.purpose], ["Bank (as read)", x.bank_name], ["Amount check", x.amount_sanity_check && x.amount_sanity_check !== "no_regex_match" ? x.amount_sanity_check : null]];
+      const found = detail.filter(([, v]) => v), missing = detail.filter(([, v]) => !v).map(([k]) => k);
+      const reason = x.classification_reason ? `<div class="inv-reason ${inv.status === "NOT_BANK" ? "warn" : ""}"><b>${inv.status === "NOT_BANK" ? "Rejected" : "Selected"}</b> ${esc(x.classification_reason)}</div>` : "";
+      summaryHtml = `<div class="inv-facts">${fact("Reference", inv.reference_number, true)}${fact("Date", inv.txn_date)}${fact("Amount", amount)}${fact("Document", x.document_type)}</div>
+        <div class="panel"><h2>Details <span class="right">${esc(x.extraction_method || "")}${x.llm_model ? " · " + esc(x.llm_model) : ""}</span></h2><div class="panel-body">
+        ${reason}
+        ${content.kind === "pdf_scanned" ? `<div class="alert info">Scanned PDF (no text layer): the AI read the page images directly.</div>` : ""}
+        ${found.length ? `<div class="kv">${found.map(([k, v]) => field(k, v)).join("")}</div>` : `<div class="muted">No further details were read.</div>`}
+        ${missing.length ? `<div class="muted inv-missing">Not in the document: ${missing.map(esc).join(" · ")}</div>` : ""}
+        ${(x.document_details || []).map((d) => `<h3 class="inv-h3">${esc(d.document || "Document")}</h3>
           <div class="kv">${(d.details || []).map((f) => field(f.label, f.value)).join("")}</div>`).join("")}
-      </div></div>`;
+      </div></div>
+      ${x.items_table?.rows?.length ? `<div class="panel"><h2>Items in the document <span class="right">${x.items_table.rows.length} line${x.items_table.rows.length === 1 ? "" : "s"}</span></h2>
+        <div class="table-wrap"><table><thead><tr>${(x.items_table.columns || []).map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+        <tbody>${x.items_table.rows.map((r) => `<tr>${r.map((v) => `<td>${esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table></div></div>` : ""}`;
     }
+
+    const sourcePanel = `<div class="panel"><h2>Source email</h2><div class="panel-body kv inv-source">
+        ${field("From", inv.email_sender)}${field("Subject", inv.email_subject)}${field("Fetched", fmtTime(inv.created_at))}${field("Bank", `${inv.bank_name} (${inv.bank_code})`)}
+      </div></div>`;
+    const waPanel = `<div class="panel"><h2>WhatsApp conversation <span class="right">${inv.messages.length} message${inv.messages.length === 1 ? "" : "s"}</span></h2>${chat(inv.messages)}</div>`;
+    const emailFrame = content.kind === "email" ? `<div class="panel"><h2>Email <span class="right"><a href="/api/invoices/${inv.id}/pdf" target="_blank" rel="noopener">Open full page ↗</a></span></h2>
+        <iframe src="/api/invoices/${inv.id}/pdf" title="Email" style="width:100%;height:600px;border:0;display:block"
+          onload="try { this.style.height = this.contentDocument.documentElement.scrollHeight + 'px'; } catch {}"></iframe></div>` : "";
+    const rawPanel = `<div class="panel"><details><summary>Raw text read from the ${content.kind === "email" ? "email" : "PDF"} ${content.text ? `<span class="muted">(${content.text.length.toLocaleString()} characters)</span>` : ""}</summary>
+        <div class="panel-body">${content.text ? `<pre class="text">${esc(content.text)}</pre>` : `<span class="muted">${content.kind === "pdf_scanned" ? "Scanned PDF: no text layer. Open the file to see it." : "No text available."}</span>`}</div></details></div>`;
 
     return pageHeader(`${inv.bank_name} · #${inv.id}`, `${statusBadge(inv.status)}${needsFormatBadge(inv.needs_format)} <span class="muted">${esc(inv.pdf_filename.replace(/^[^_]+_/, ""))}</span>`,
       `<button data-action="back">← Back</button>
        <a class="btn" href="/api/invoices/${inv.id}/pdf" target="_blank" rel="noopener">${content.kind === "email" ? "Open email" : "Open file"} ↗</a>
-       <button class="danger" data-action="delete" data-id="${inv.id}" data-name="${esc(inv.pdf_filename.replace(/^[^_]+_/, ""))}">🗑 Delete</button>
+       <button class="danger" data-action="delete" data-id="${inv.id}" data-name="${esc(inv.pdf_filename.replace(/^[^_]+_/, ""))}">${ICON.trash} Delete</button>
        <button class="${inv.status === "FAILED_PARSE" ? "primary" : ""}" data-action="reparse" data-id="${inv.id}" data-status="${inv.status}" ${parsing.has(String(inv.id)) ? "disabled" : ""}>${parsing.has(String(inv.id)) ? `<span class="spin"></span> Parsing…` : "↻ Re-parse file"}</button>
        ${canResend ? `<button class="primary" data-action="resend" data-id="${inv.id}">Resend on WhatsApp</button>` : ""}`) + `
       ${inv.parse_error && !st ? `<div class="alert bad"><b>Parse error:</b> ${esc(inv.parse_error)}</div>` : ""}
       ${content.error ? `<div class="alert bad"><b>Couldn't read PDF:</b> ${esc(content.error)}</div>` : ""}
-      <div class="panel"><h2>Source email</h2><div class="panel-body kv">
-        ${field("From", inv.email_sender)}${field("Subject", inv.email_subject)}${field("Fetched", fmtTime(inv.created_at))}${field("Bank", `${inv.bank_name} (${inv.bank_code})`)}
-      </div></div>
-      ${summaryHtml}
-      ${rowsHtml}
-      ${content.kind === "email" ? `<div class="panel"><h2>Email <span class="right"><a href="/api/invoices/${inv.id}/pdf" target="_blank" rel="noopener">Open full page ↗</a></span></h2>
-        <iframe src="/api/invoices/${inv.id}/pdf" title="Email" style="width:100%;height:600px;border:0;display:block"
-          onload="try { this.style.height = this.contentDocument.documentElement.scrollHeight + 'px'; } catch {}"></iframe></div>` : ""}
-      <div class="panel"><h2>WhatsApp conversation <span class="right">${inv.messages.length} messages</span></h2>${chat(inv.messages)}</div>
-      <div class="panel"><details><summary>Raw text read from the ${content.kind === "email" ? "email" : "PDF"} ${content.text ? `<span class="muted">(${content.text.length.toLocaleString()} characters)</span>` : ""}</summary>
-        <div class="panel-body">${content.text ? `<pre class="text">${esc(content.text)}</pre>` : `<span class="muted">${content.kind === "pdf_scanned" ? "Scanned PDF: no text layer. Open the file to see it." : "No text available."}</span>`}</div></details></div>`;
+      ${st ? `${sourcePanel}${summaryHtml}${rowsHtml}${emailFrame}${waPanel}`
+        : `<div class="inv-detail"><div class="inv-main">${summaryHtml}${rowsHtml}${emailFrame}</div><div class="inv-aside">${sourcePanel}${waPanel}</div></div>`}
+      ${rawPanel}`;
   },
 
   async transactions(filter) {
@@ -698,34 +915,48 @@ const views = {
       <div class="panel">${list.length ? txnTable(list, { showPdf: true }) : `<div class="empty-state">No transactions${filter ? " with this status" : " yet. They appear when a bank statement PDF arrives"}.</div>`}</div>`;
   },
 
-  async whatsapp() {
-    const [msgs, s] = await Promise.all([api("/whatsapp/messages"), api("/status")]);
+  async whatsapp(filter) {
+    const [all, s] = await Promise.all([api("/whatsapp/messages"), api("/status")]);
     const wa = s.whatsapp.openwa;
     const ready = wa && wa.status === "ready";
+    const tests = { out: (m) => m.direction === "out", in: (m) => m.direction === "in", failed: (m) => m.status === "failed" };
+    const msgs = tests[filter] ? all.filter(tests[filter]) : all;
+    const chips = [["", "All", all.length], ["out", "Sent", all.filter(tests.out).length], ["in", "Received", all.filter(tests.in).length], ["failed", "Failed", all.filter(tests.failed).length]];
     const rows = msgs.map((m) => `<tr>
+        <td class="sel-col">${selBox("messages", m.id)}</td>
         <td class="nowrap">${esc(fmtTime(m.created_at))}</td>
-        <td class="nowrap">${m.direction === "out" ? "→ Sent" : "← Received"}</td>
+        <td><span class="badge ${m.direction === "out" ? "info" : "ok"}">${m.direction === "out" ? "→ Sent" : "← Received"}</span></td>
         <td class="mono nowrap">${esc(m.peer_number || "—")}</td>
-        <td><div style="white-space:pre-wrap">${esc(m.text)}</div>${m.error ? `<div class="debit" style="font-size:12px">${esc(m.error)}</div>` : ""}</td>
+        <td><div class="msg-text">${esc(m.text)}</div>${m.error ? `<div class="debit" style="font-size:12px">${esc(m.error)}</div>` : ""}</td>
         <td class="nowrap">${m.transaction_id ? `<a href="#invoice/${m.invoice_id}">T${m.transaction_id}</a>` : m.invoice_id ? `<a href="#invoice/${m.invoice_id}">#${m.invoice_id}</a>` : "—"}</td>
-        <td>${msgBadge(m.status)}</td></tr>`).join("");
+        <td>${msgBadge(m.status)}</td>
+        <td><button class="icon danger" data-action="msg-delete" data-id="${m.id}" title="Delete this message">${ICON.trash}</button></td></tr>`).join("");
     return pageHeader("WhatsApp", "Every message the bot sent or received, with delivery status") + `
-      <div class="panel"><h2>Connection</h2><div class="panel-body kv">
-        <div><div class="k">Provider</div><div class="v">${esc(s.whatsapp.provider === "openwa" ? "OpenWA (self-hosted)" : "Meta Cloud API")}</div></div>
-        ${wa ? `<div><div class="k">Session</div><div class="v"><span class="badge ${ready ? "ok" : "bad"}">${esc(wa.status)}</span></div></div>
-        <div><div class="k">Bot number</div><div class="v">${wa.phone ? "+" + esc(wa.phone) : "—"} ${wa.pushName ? `<span class="muted">(${esc(wa.pushName)})</span>` : ""}</div></div>` : ""}
-        <div><div class="k">Prompts go to</div><div class="v">${esc(s.whatsapp.notify_numbers.join(", ") || "not set")}</div>
-          <div class="muted" style="font-size:12px">set in ${esc(s.whatsapp.notify_numbers_source)}</div></div>
+      <div class="wa-banner ${wa && !ready ? "bad" : "ok"}">
+        <span class="wa-ico">${wa && !ready ? "!" : "✓"}</span>
+        <div class="wa-text"><b>${wa && !ready ? "WhatsApp is not connected" : "WhatsApp is connected"}</b>
+          <div>${wa && !ready ? openwaProblem(wa, s.whatsapp.openwa_url) : wa ? `Sending as ${wa.phone ? "+" + esc(wa.phone) : "the bot number"}${wa.pushName ? ` (${esc(wa.pushName)})` : ""}. Prompts will be delivered.` : "Using the Meta Cloud API."}</div></div>
+        ${wa && !ready && s.whatsapp.openwa_url ? `<a class="btn" href="${esc(s.whatsapp.openwa_url)}" target="_blank" rel="noopener">Open OpenWA ↗</a>` : ""}
       </div>
-      <form id="notify-form" class="panel-body" style="padding-top:0;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <input name="numbers" value="${esc(s.whatsapp.notify_numbers.join(", "))}" placeholder="923001234567" required
-          style="flex:1;min-width:200px;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font:inherit;background:var(--bg);color:var(--fg)">
-        <button type="submit">Save number</button>
-        <div class="muted" style="font-size:12px;flex-basis:100%">Full number with country code (e.g. 923001234567). New prompts go to this number, and Yes/No replies are accepted from it. Prompts already sent stay with the number they went to.</div>
-      </form>${wa && !ready ? `<div class="panel-body" style="padding-top:0"><div class="alert bad">${openwaProblem(wa, s.whatsapp.openwa_url)}</div></div>` : ""}</div>
-      <div class="panel"><h2>Message log <span class="right">${msgs.length} messages</span></h2>
-        ${msgs.length ? `<div class="table-wrap"><table><thead><tr><th>Time</th><th>Direction</th><th>Number</th><th>Message</th><th>For</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`
-          : `<div class="empty-state">No messages yet. When a PDF is extracted, the confirmation prompt will show up here.</div>`}
+      <div class="wa-grid">
+        <div class="panel"><h2>Send prompts to</h2>
+          <form id="notify-form" class="panel-body" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <input class="field" name="numbers" value="${esc(s.whatsapp.notify_numbers.join(", "))}" placeholder="923001234567" required style="flex:1;min-width:180px">
+            <button class="primary" type="submit">Save</button>
+            <div class="muted" style="font-size:12px;flex-basis:100%">Full number with country code (e.g. 923001234567). New prompts go to this number, and Yes/No replies are accepted from it. Prompts already sent stay with the number they went to. Set in ${esc(s.whatsapp.notify_numbers_source)}.</div>
+          </form></div>
+        <div class="panel"><h2>Details</h2><div class="panel-body kv" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
+          <div><div class="k">Provider</div><div class="v">${esc(s.whatsapp.provider === "openwa" ? "OpenWA (self-hosted)" : "Meta Cloud API")}</div></div>
+          ${wa ? `<div><div class="k">Session</div><div class="v"><span class="badge ${ready ? "ok" : "bad"}">${esc(wa.status)}</span></div></div>
+          <div><div class="k">Bot number</div><div class="v">${wa.phone ? "+" + esc(wa.phone) : "—"}</div></div>` : ""}
+          <div><div class="k">Messages logged</div><div class="v">${all.length}</div></div>
+        </div></div>
+      </div>
+      <div class="panel"><h2>Message log
+          <span class="right" style="display:flex;align-items:center;gap:12px">${all.length} message${all.length === 1 ? "" : "s"}${all.length ? `<button class="danger" data-action="msg-clear" data-count="${all.length}">${ICON.trash} Clear log</button>` : ""}</span></h2>
+        <div class="chips" style="padding:12px 16px 0;margin:0">${chips.map(([v, l, n]) => `<a class="chip ${(filter || "") === v ? "active" : ""}" href="#whatsapp${v ? "/" + v : ""}">${esc(l)} <span>${n}</span></a>`).join("")}</div>
+        ${msgs.length ? `<div class="table-wrap scroll" style="margin-top:12px"><table><thead><tr><th class="sel-col">${selAll("messages")}</th><th>Time</th><th>Direction</th><th>Number</th><th>Message</th><th>For</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+          : `<div class="empty-state">${all.length ? "No messages match this filter." : "No messages yet. When a PDF is extracted, the confirmation prompt will show up here."}</div>`}
       </div>`;
   },
 
@@ -743,7 +974,7 @@ const views = {
           const [y, m] = month.split("-");
           rows += `<div class="inv-month">${esc(new Date(+y, +m - 1).toLocaleString(undefined, { month: "long", year: "numeric" }))}</div>`;
         }
-        rows += `<div class="inv-row" data-ref="${esc(r.ref)}">
+        rows += `<div class="inv-row" data-ref="${esc(r.ref)}" data-date="${esc(r.date.split("-").reverse().join("-"))}">
           <input type="checkbox" class="inv-check" data-ref="${esc(r.ref)}" aria-label="Select this report">
           <button class="inv-pick" data-action="inv-open" data-ref="${esc(r.ref)}" data-name="${esc(r.name)}" data-xlsx="${r.xlsx ? 1 : 0}"><b>${esc(r.date)}</b><span class="muted">${r.record ? "#" + esc(r.record) : ""}</span></button>
           <button class="inv-del" data-action="inv-delete" data-ref="${esc(r.ref)}" data-name="${esc(r.name)}" title="Delete this report">✕</button></div>`;
@@ -752,20 +983,29 @@ const views = {
         <div class="inv-bar-sel"><label><input type="checkbox" class="inv-all"> Select all</label><span class="muted inv-count"></span>
           <button class="danger" data-action="inv-delete-selected" disabled>Delete selected</button></div>${rows}</div>`;
     }).join("");
-    return pageHeader("Stock Reports", "Every stock report, firm by firm and date by date. Each report carries on from the one before it; click one to open it here.") + `
-      <div class="chips" style="align-items:center">
+    // No page heading: the report itself runs from the top of the window; the firm picker, file buttons and dates sit beside it.
+    return `
+      <div class="inv"><div class="inv-side">
+      <div class="chips" title="${firms.length} firm${firms.length === 1 ? "" : "s"}">
         <div class="dd" id="inv-dd">
           <button class="dd-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
             <span class="dd-name" id="dd-label">${esc(firms[chosen].name)}</span><span class="dd-count" id="dd-count">${firms[chosen].reports.length}</span>
             <svg class="dd-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 9 6 6 6-6"/></svg></button>
           <div class="dd-menu" role="listbox">${options}</div>
         </div>
-        <span class="muted">${firms.length} firm${firms.length === 1 ? "" : "s"}</span>
       </div>
-      <div class="inv">${lists}
+      <div class="inv-actions"><div class="grow" id="inv-title">Pick a date</div>
+        <a class="btn" id="inv-xlsx" title="Download Excel" hidden>Excel ↓</a><a class="btn" id="inv-pdf" title="Download PDF" hidden>PDF ↓</a><a class="btn" id="inv-tab" title="Open in new tab" target="_blank" rel="noopener" hidden>Open ↗</a></div>
+      <div class="inv-range">
+        <div class="inv-range-chips">${[["7", "7 days"], ["15", "15 days"], ["30", "30 days"], ["", "All"]].map(([d, l]) => `<button type="button" class="chip" data-action="inv-range" data-days="${d}">${l}</button>`).join("")}</div>
+        <div class="inv-range-dates"><input type="date" id="rg-from" class="field" aria-label="From"><span class="muted">to</span><input type="date" id="rg-to" class="field" aria-label="To"></div>
+        <button type="button" class="primary" data-action="inv-bankpdf" title="Every day's report exactly as the bank approved it, in one PDF">Bank-format PDF of these days</button>
+        <button type="button" data-action="inv-table">Date-wise table</button>
+      </div>
+      ${lists}
+      </div>
         <div class="panel inv-view">
-          <div class="inv-bar"><div class="grow" id="inv-title">Pick a date</div>
-            <a class="btn" id="inv-xlsx" hidden>Download Excel</a><a class="btn" id="inv-pdf" hidden>Download PDF</a><a class="btn" id="inv-tab" target="_blank" rel="noopener" hidden>Open in new tab ↗</a></div>
+          <div id="inv-table"></div>
           <iframe id="inv-frame" title="Stock report"></iframe>
         </div>
       </div>`;
@@ -777,91 +1017,135 @@ const views = {
       const cols = Object.entries(t.summary.columns).map(([k, v]) => `<span class="badge">${esc(k)} <b>${esc(v)}</b></span>`).join("");
       const notes = t.notes.length ? `<ul class="fmt-notes">${t.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : "";
       const id = encodeURIComponent(t.id);
-      return `<div class="panel"><h2>${esc(t.name)}
-          <span class="badge ${t.source === "builtin" ? "" : "info"}">${t.source === "builtin" ? "Built-in" : "Added"}</span>
-          <span class="right">${esc(t.original_name)} · ${esc(fmtTime(t.added_at))}</span></h2>
-        <div class="panel-body" style="display:flex;flex-direction:column;gap:14px">
+      return `<div class="panel fmt-card">
+        <div class="fmt-head">
+          <div class="fmt-title"><b>${esc(t.name)}</b>
+            <span class="badge ${t.source === "builtin" ? "" : "info"}">${t.source === "builtin" ? "Built-in" : "Added"}</span></div>
+          <div class="muted fmt-file">${esc(t.original_name)} · ${esc(fmtTime(t.added_at))}</div>
+        </div>
+        <div class="fmt-body">
           ${t.file_exists ? "" : `<div class="alert bad" style="margin:0">The Excel file is missing from the server, so this format can't be filled. Remove it and add it again.</div>`}
-          <div class="fmt-grid">
-            <div><div class="muted" style="font-size:12px">Stock lines</div><div><b>rows ${esc(t.summary.stock_rows)}</b>${t.summary.margin_pct != null ? ` · margin ${esc(t.summary.margin_pct)}%` : ""}</div></div>
-            <div><div class="muted" style="font-size:12px">Date cell · godown sentence</div><div><b>${esc(t.summary.date_cell || "—")}</b> · <b>${esc(t.summary.text_cell)}</b></div></div>
-          </div>
-          <div class="fmt-cols">${cols}</div>
-          ${notes}
-          <form class="format-match" data-id="${esc(t.id)}" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-            <label style="flex:2;min-width:220px"><div class="muted" style="font-size:12px">Used for customers named (comma separated)</div>
-              <input class="field" name="customers" value="${esc(t.customers.join(", "))}" style="width:100%" required></label>
-            <button type="submit" style="align-self:flex-end">Save</button>
+          <form class="format-match" data-id="${esc(t.id)}">
+            <label class="muted" for="fm-${esc(t.id)}">Used for customers named <span style="opacity:.7">(comma separated)</span></label>
+            <div class="fmt-row"><input class="field" id="fm-${esc(t.id)}" name="customers" value="${esc(t.customers.join(", "))}" required>
+              <button type="submit">Save</button></div>
           </form>
-          <div class="fmt-actions">
-            <a class="btn" href="/api/stock-templates/${id}/preview" target="_blank" rel="noopener" title="Fills it with made-up goods (takes about 15 seconds)">Preview PDF ↗</a>
-            <a class="btn" href="/api/stock-templates/${id}/file">Download Excel</a>
-            ${t.source === "builtin" ? "" : `<button data-action="format-review" data-id="${esc(t.id)}">Read again with AI</button>`}
-            <button class="danger" data-action="format-remove" data-id="${esc(t.id)}" data-name="${esc(t.name)}">Remove</button>
-          </div>
+          <details class="fmt-details"><summary>Layout details</summary>
+            <div class="fmt-grid" style="margin-top:10px">
+              <div><div class="muted" style="font-size:12px">Stock lines</div><div><b>rows ${esc(t.summary.stock_rows)}</b>${t.summary.margin_pct != null ? ` · margin ${esc(t.summary.margin_pct)}%` : ""}</div></div>
+              <div><div class="muted" style="font-size:12px">Date cell · godown sentence</div><div><b>${esc(t.summary.date_cell || "—")}</b> · <b>${esc(t.summary.text_cell)}</b></div></div>
+            </div>
+            <div class="fmt-cols" style="margin-top:10px">${cols}</div>${notes}
+          </details>
+        </div>
+        <div class="fmt-actions">
+          <a class="btn" href="/api/stock-templates/${id}/preview" target="_blank" rel="noopener" title="Fills it with made-up goods (takes about 15 seconds)">Preview PDF ↗</a>
+          <a class="btn" href="/api/stock-templates/${id}/file">Download Excel</a>
+          ${t.source === "builtin" ? "" : `<button data-action="format-review" data-id="${esc(t.id)}">Read again with AI</button>`}
+          <button class="danger" data-action="format-remove" data-id="${esc(t.id)}" data-name="${esc(t.name)}" style="margin-left:auto">Remove</button>
         </div></div>`;
     }).join("");
-    return pageHeader("Report formats", "The Excel formats the stock report is filled into. Add a sample and the AI works out where each figure goes; the sample's own calculations are never changed.") + `
-      <div class="panel"><h2>Add a format</h2>
-        <form id="format-form" class="panel-body" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-          <label style="flex:2;min-width:240px"><div class="muted" style="font-size:12px">Excel sample (.xlsx or .xls)</div>
-            <input class="field" type="file" name="file" accept=".xlsx,.xls" required style="width:100%"></label>
-          <label style="flex:1;min-width:200px"><div class="muted" style="font-size:12px">Customer name (optional, read from the file otherwise)</div>
-            <input class="field" name="customer" placeholder="e.g. Al Mustafa Rice Mills" style="width:100%"></label>
-          <button class="primary" type="submit">Add &amp; let AI read it</button>
-          <div class="muted" style="font-size:12px;flex-basis:100%">A filled-in report works as a sample: its old stock lines are replaced by the new invoice's goods, and its totals, margins and drawing-power formulas stay as they are. Use <b>Preview PDF</b> afterwards to check every figure lands in the right place.</div>
-        </form></div>
-      ${templates.length ? cards : `<div class="empty-state">No report formats yet. Add an Excel sample above.</div>`}`;
+    return pageHeader("Report formats", "The Excel formats the stock report is filled into. Add a sample and the AI works out where each figure goes.") + `
+      <form id="format-form" class="panel fmt-add">
+        <label class="fmt-add-file"><span class="muted">Excel sample (.xlsx or .xls)</span>
+          <input class="field" type="file" name="file" accept=".xlsx,.xls" required></label>
+        <label class="fmt-add-name"><span class="muted">Customer name <span style="opacity:.7">(optional)</span></span>
+          <input class="field" name="customer" placeholder="e.g. Al Mustafa Rice Mills"></label>
+        <button class="primary" type="submit">Add &amp; let AI read it</button>
+        <div class="muted fmt-add-hint">A filled-in report works as a sample: its old stock lines are replaced by the new invoice's goods; its totals, margins and drawing-power formulas stay as they are. Use <b>Preview PDF</b> afterwards to check every figure.</div>
+      </form>
+      <div class="fmt-list-head">${templates.length} format${templates.length === 1 ? "" : "s"}</div>
+      ${templates.length ? `<div class="fmt-list">${cards}</div>` : `<div class="empty-state">No report formats yet. Add an Excel sample above.</div>`}`;
+  },
+
+  async factories() {
+    const { factories } = await api("/factories");
+    const FIELDS = [["margin_pct", "Margin %", "5"], ["weight_per_unit", "Weight per unit", "50"], ["weight_measurement", "Weight measurement", "50"], ["rate_per_unit", "Rate per unit", "3800"]];
+    const cards = factories.map((f) => {
+      const rows = f.goods.map((g) => {
+        const missing = FIELDS.filter(([k]) => !g[k]).length;
+        return `<form class="goods-form" data-customer="${esc(f.key)}" data-goods="${esc(g.key)}">
+          <div class="goods-name"><b>${esc(g.label)}</b>
+            ${g.orders.length ? `<div class="muted" style="font-size:12px">${g.orders.map((o) => `<a href="#invoice/${o}">#${o}</a>`).join(" ")}</div>` : ""}
+            ${g.saved ? "" : `<span class="badge warn">not given yet</span>`}</div>
+          ${FIELDS.map(([k, label, ph]) => `<label class="goods-field"><span class="muted">${label}</span><input class="field" name="${k}" value="${esc(g[k] || "")}" placeholder="${ph}" inputmode="decimal"></label>`).join("")}
+          <div class="goods-actions"><button type="submit" class="primary">Save</button>
+            ${g.saved ? `<button type="button" class="icon danger" data-action="goods-clear" data-customer="${esc(f.key)}" data-goods="${esc(g.key)}" data-name="${esc(f.name + " · " + g.label)}" title="Forget what is saved">${ICON.trash}</button>` : ""}</div>
+          ${g.updated_at ? `<div class="muted goods-when">Saved ${esc(fmtTime(g.updated_at))}${missing ? ` · ${missing} still missing` : ""}</div>` : ""}
+        </form>`;
+      }).join("");
+      return `<div class="panel fac-card"><h2>${esc(f.name)}
+          <span class="right">${f.orders.length} order${f.orders.length === 1 ? "" : "s"}${f.orders.length ? " · " + f.orders.slice(-3).map((o) => `<a href="#invoice/${o}">#${o}</a>`).join(" ") : ""}</span></h2>
+        <div class="goods-list">${rows || `<div class="empty-state">No goods yet.</div>`}</div></div>`;
+    }).join("");
+    return pageHeader("Factories", "What the bot keeps for each factory's goods. Give margin, weight and rate once (on WhatsApp or here) and every later invoice of that factory's goods uses them without asking. A change applies from the next invoice.") +
+      (factories.length ? cards : `<div class="panel"><div class="empty-state">No factories yet. They appear here as soon as a delivery order is confirmed on WhatsApp.</div></div>`);
   },
 
   async cad() {
     const { contacts } = await api("/cad");
-    const rows = contacts.map((c) => `<tr>
-      <td><b>${esc(c.address)}</b>${c.is_domain ? ` <span class="badge info">whole domain</span>` : ""}</td>
-      <td>${esc(c.name || "—")}</td><td class="nowrap">${esc(fmtTime(c.added_at))}</td>
-      <td><button class="icon danger" data-action="cad-remove" data-id="${c.id}" data-address="${esc(c.address)}" data-name="${esc(c.name || "")}"${contacts.length === 1 ? ' data-last="1"' : ""} title="Remove">🗑</button></td></tr>`).join("");
-    return pageHeader("CAD", "The CAD officers and bank people whose emails the bot entertains. An email is read only when it, or the original message it forwards, is from someone on this list.") + `
-      <div class="panel"><h2>Add a person</h2>
-        <form id="cad-form" class="panel-body" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-          <label style="flex:2;min-width:240px"><div class="muted" style="font-size:12px">Email address (or a whole domain, e.g. @meezanbank.com)</div>
-            <input class="field" name="address" placeholder="officer@meezanbank.com" required style="width:100%"></label>
-          <label style="flex:1;min-width:180px"><div class="muted" style="font-size:12px">Name (optional)</div>
-            <input class="field" name="name" placeholder="e.g. Asif Raza" style="width:100%"></label>
-          <button class="primary" type="submit">Add</button>
-        </form></div>
-      <div class="panel"><h2>Allowed senders <span class="right">${contacts.length}</span></h2>
-        ${contacts.length ? `<div class="table-wrap"><table><thead><tr><th>Email</th><th>Name</th><th>Added</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
-          : `<div class="empty-state">The list is empty, so emails from anyone are read. Add a CAD officer above to read only their emails.</div>`}</div>`;
+    const initials = (c) => (c.is_domain ? "@" : ((c.name || c.address).trim().split(/[\s@._-]+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("") || "?")).toUpperCase();
+    const rows = contacts.map((c) => `<div class="cad-row">
+      <div class="cad-avatar${c.is_domain ? " domain" : ""}">${esc(initials(c))}</div>
+      <div class="cad-who"><div class="cad-name">${esc(c.name || (c.is_domain ? "Everyone at this domain" : c.address.split("@")[0]))}${c.is_domain ? ` <span class="badge info">whole domain</span>` : ""}</div>
+        <div class="muted mono cad-addr">${esc(c.address)}</div></div>
+      <div class="muted cad-added">Added ${esc(fmtTime(c.added_at))}</div>
+      <button class="icon danger" data-action="cad-remove" data-id="${c.id}" data-address="${esc(c.address)}" data-name="${esc(c.name || "")}"${contacts.length === 1 ? ' data-last="1"' : ""} title="Remove">${ICON.trash}</button></div>`).join("");
+    return pageHeader("CAD", "The CAD officers and bank people whose emails the bot entertains.") + `
+      <div class="cad-status ${contacts.length ? "on" : "off"}">
+        <b>${contacts.length ? `Only ${contacts.length} sender${contacts.length === 1 ? "" : "s"} allowed` : "Everyone is allowed"}</b>
+        <span>${contacts.length ? "An email is read only when it, or the original message it forwards, is from someone on this list. All other emails are skipped." : "The list is empty, so emails from anyone are read. Add a CAD officer below to read only their emails."}</span></div>
+      <form id="cad-form" class="panel cad-add">
+        <label class="cad-add-addr"><span class="muted">Email address, or a whole domain like @meezanbank.com</span>
+          <input class="field" name="address" placeholder="officer@meezanbank.com" required></label>
+        <label class="cad-add-name"><span class="muted">Name <span style="opacity:.7">(optional)</span></span>
+          <input class="field" name="name" placeholder="e.g. Asif Raza"></label>
+        <button class="primary" type="submit">+ Add person</button>
+      </form>
+      <div class="fmt-list-head">Allowed senders · ${contacts.length}</div>
+      ${contacts.length ? `<div class="panel cad-list">${rows}</div>` : `<div class="empty-state panel">No one added yet.</div>`}`;
   },
 
   async settings() {
     const s = await api("/status");
+    const g = s.gmail, wa = s.whatsapp.openwa;
+    const waOk = wa ? wa.status === "ready" : s.whatsapp.provider === "meta";
+    const listening = g.pubsub.state === "listening";
+    const tile = (label, state, value, sub) => `<div class="set-tile"><div class="set-tile-top"><span class="dot ${state}"></span>${esc(label)}</div>
+      <div class="set-tile-val">${value}</div><div class="muted set-tile-sub">${sub}</div></div>`;
     const banks = s.banks.map((b) => `<tr>
       <td><b>${esc(b.name)}</b><div class="muted">${esc(b.code)}</div></td>
       <td class="mono">${b.sender_match.map(esc).join("<br>")}</td>
-      <td>${esc(b.parser === "LLM" ? "LLM (" + s.llm.model + ")" : b.parser)}</td>
+      <td>${esc(b.parser === "LLM" ? "LLM" : b.parser)}</td>
       <td>${b.password_env ? `<span class="badge ${b.password_set ? "ok" : "bad"}">${b.password_set ? "set" : "missing"}</span> <span class="mono muted">${esc(b.password_env)}</span>` : `<span class="muted">none</span>`}</td></tr>`).join("");
-    const g = s.gmail;
+    const kv = (k, v) => `<div><div class="k">${k}</div><div class="v">${v}</div></div>`;
     return pageHeader("Settings", "Read-only view of the current configuration. Edit <span class=\"mono\">.env</span> and <span class=\"mono\">app/bank_registry.py</span> to change it.") + `
-      <div class="panel"><h2>Delete data</h2><div class="panel-body" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+      <div class="set-tiles">
+        ${tile("Gmail", g.initialized ? "ok" : "warn", g.initialized ? "Connected" : "Not started", `Last sync ${esc(ago(g.last_sync_at))}`)}
+        ${tile("WhatsApp", waOk ? "ok" : "bad", waOk ? "Connected" : esc(wa ? wa.status : s.whatsapp.provider), esc(s.whatsapp.provider === "openwa" ? "OpenWA (self-hosted)" : "Meta Cloud API"))}
+        ${tile("AI model", s.llm.configured ? "ok" : "bad", s.llm.configured ? "Ready" : "No API key", `<span class="mono">${esc(s.llm.model)}</span>`)}
+        ${tile("Google Sheet", s.sheets.url ? "ok" : "warn", s.sheets.url ? `<a href="${esc(s.sheets.url)}" target="_blank" rel="noopener">Open sheet ↗</a>` : "Not configured", "Where confirmed rows are saved")}
+      </div>
+      <div class="set-cols">
+        <div class="panel"><h2>Gmail</h2><div class="panel-body kv" style="grid-template-columns:repeat(2,1fr)">
+          ${kv("Watching labels", esc(g.labels))}
+          ${kv("Last sync", esc(fmtTime(g.last_sync_at)))}
+          ${kv("Push watch expires", esc(fmtTime(g.watch_expires_at)))}
+          ${kv("Polling", listening ? "off (Pub/Sub is active)" : `fallback every ${esc(g.reconcile_interval_seconds)} s`)}
+          <div style="grid-column:1/-1"><div class="k">Pub/Sub listener</div>
+            <div class="v"><span class="badge ${listening ? "ok" : g.pubsub.state === "disabled" ? "" : "bad"}">${esc(g.pubsub.state)}</span></div>
+            ${g.pubsub.subscription ? `<div class="set-path mono">${esc(g.pubsub.subscription)}</div>` : ""}
+            ${g.pubsub.detail ? `<div class="muted" style="font-size:12px;margin-top:4px">${esc(g.pubsub.detail)}</div>` : ""}</div>
+          ${kv("History cursor", `<span class="mono">${esc(g.last_history_id || "—")}</span>`)}
+        </div></div>
+        <div class="panel"><h2>Banks <span class="right">${s.banks.length}</span></h2>${s.banks.length ? `<div class="table-wrap"><table>
+          <thead><tr><th>Bank</th><th>Matches sender</th><th>Parser</th><th>PDF password</th></tr></thead><tbody>${banks}</tbody></table></div>`
+          : `<div class="empty-state">No banks configured. Every email will be stored as "Unknown bank".</div>`}</div>
+      </div>
+      <div class="panel set-danger"><h2>Danger zone</h2><div class="panel-body" style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+        <div style="flex:1;min-width:260px"><b>Delete all data</b>
+          <div class="muted" style="font-size:13px;margin-top:2px">Removes every email, extracted file, statement row, WhatsApp message and generated stock report from the dashboard and the server. Gmail, the Google Sheet, the report formats and the settings are not touched.</div></div>
         ${clearButton("everything", "Delete everything")}
-        <span class="muted" style="font-size:13px">Removes every email, extracted file, statement row, WhatsApp message and generated stock report from the dashboard and the server. Gmail, the Google Sheet, the report formats and the settings are not touched.</span>
-      </div></div>
-      <div class="panel"><h2>Banks</h2>${s.banks.length ? `<div class="table-wrap"><table>
-        <thead><tr><th>Bank</th><th>Matches sender</th><th>Parser</th><th>PDF password</th></tr></thead><tbody>${banks}</tbody></table></div>`
-        : `<div class="empty-state">No banks configured. Every email will be stored as "Unknown bank".</div>`}</div>
-      <div class="panel"><h2>Gmail</h2><div class="panel-body kv">
-        <div><div class="k">Watching labels</div><div class="v">${esc(g.labels)}</div></div>
-        <div><div class="k">Last sync</div><div class="v">${esc(fmtTime(g.last_sync_at))}</div></div>
-        <div><div class="k">Pub/Sub listener</div><div class="v"><span class="badge ${g.pubsub.state === "listening" ? "ok" : g.pubsub.state === "disabled" ? "" : "bad"}">${esc(g.pubsub.state)}</span> <span class="mono muted">${esc(g.pubsub.subscription || "")}</span></div>${g.pubsub.detail ? `<div class="muted" style="font-size:12px">${esc(g.pubsub.detail)}</div>` : ""}</div>
-        <div><div class="k">Polling</div><div class="v">${g.pubsub.state === "listening" ? "off (Pub/Sub is active)" : `fallback every ${esc(g.reconcile_interval_seconds)} s`}</div></div>
-        <div><div class="k">Push watch expires</div><div class="v">${esc(fmtTime(g.watch_expires_at))}</div></div>
-        <div><div class="k">History cursor</div><div class="v mono">${esc(g.last_history_id || "—")}</div></div>
-      </div></div>
-      <div class="panel"><h2>Extraction &amp; output</h2><div class="panel-body kv">
-        <div><div class="k">LLM model</div><div class="v">${esc(s.llm.model)} ${s.llm.configured ? "" : `<span class="badge bad">no API key</span>`}</div></div>
-        <div><div class="k">WhatsApp provider</div><div class="v">${esc(s.whatsapp.provider)}</div></div>
-        <div><div class="k">Google Sheet</div><div class="v">${s.sheets.url ? `<a href="${esc(s.sheets.url)}" target="_blank" rel="noopener">Open sheet ↗</a>` : "not configured"}</div></div>
       </div></div>`;
   },
 };
@@ -889,15 +1173,17 @@ function txnTable(list, { showPdf }) {
 }
 
 function invoiceTable(list) {
-  return `<div class="table-wrap"><table>
-    <thead><tr><th class="sel-col">${selAll("invoices")}</th><th>#</th><th>Fetched</th><th>Bank</th><th>PDF</th><th>Date</th><th class="num">Amount</th><th>Reference</th><th>Status</th><th></th></tr></thead>
-    <tbody>${list.map((i) => `<tr class="click" data-href="#invoice/${i.id}">
-      <td class="sel-col">${selBox("invoices", i.id)}</td><td>${i.id}</td><td class="nowrap">${esc(fmtTime(i.created_at))}</td>
-      <td>${esc(i.bank_name)}</td>
-      <td class="ellipsis" title="${esc(i.pdf_filename)}">${esc(i.pdf_filename.replace(/^[^_]+_/, ""))}</td>
+  return `<div class="table-wrap"><table class="inv-table">
+    <thead><tr><th class="sel-col">${selAll("invoices")}</th><th>File</th><th>Bank</th><th>Date</th><th class="num">Amount</th><th>Reference</th><th>Status</th><th></th></tr></thead>
+    <tbody>${list.map((i) => { const name = i.pdf_filename.replace(/^[^_]+_/, ""); const body = name === "email_body.txt"; return `<tr class="click" data-href="#invoice/${i.id}">
+      <td class="sel-col">${selBox("invoices", i.id)}</td>
+      <td><div class="file-cell"><span class="file-ico ${i.status === "FAILED_PARSE" ? "bad" : ""}">${body ? ICON.mail : ICON.file}</span>
+        <div class="file-txt"><div class="file-name ellipsis" title="${esc(name)}">${esc(body ? "Email body" : name)}</div>
+          <div class="muted file-sub">#${i.id} · ${esc(fmtTime(i.created_at))}</div></div></div></td>
+      <td>${i.bank_name && i.bank_name !== "Unknown bank" ? esc(i.bank_name) : `<span class="muted">—</span>`}</td>
       <td class="nowrap">${esc(i.txn_date || "—")}</td><td class="num">${i.transaction_counts ? `${i.transaction_counts.total} txns` : esc(i.amount || "—")}</td>
       <td class="mono">${esc(i.reference_number || "—")}</td><td>${statusBadge(i.status)}${needsFormatBadge(i.needs_format)}</td>
-      <td><button class="icon danger" data-action="delete" data-id="${i.id}" data-name="${esc(i.pdf_filename.replace(/^[^_]+_/, ""))}" title="Delete this file">🗑</button></td></tr>`).join("")}
+      <td><button class="icon danger" data-action="delete" data-id="${i.id}" data-name="${esc(name)}" title="Delete this file">${ICON.trash}</button></td></tr>`; }).join("")}
     </tbody></table></div>`;
 }
 
@@ -916,15 +1202,70 @@ function fitActivityRows() {
 }
 window.addEventListener("resize", fitActivityRows);
 
+/* ---------- Stock Reports: a stretch of days as one table ---------- */
+const dayText = (d) => d.toLocaleDateString("en-CA");  // YYYY-MM-DD, local
+function applyRange() {
+  const from = $("#rg-from").value, to = $("#rg-to").value;
+  document.querySelectorAll(".inv-row").forEach((row) => { row.style.display = (from && row.dataset.date < from) || (to && row.dataset.date > to) ? "none" : ""; });
+  document.querySelectorAll(".inv-month").forEach((month) => {
+    let next = month.nextElementSibling, any = false;
+    while (next && !next.classList.contains("inv-month")) { if (next.classList.contains("inv-row") && next.style.display !== "none") any = true; next = next.nextElementSibling; }
+    month.style.display = any ? "" : "none";
+  });
+}
+const rangeQuery = () => {
+  const list = $(".inv-list.active");
+  const q = new URLSearchParams({ firm: list.dataset.key });
+  if ($("#rg-from").value) q.set("date_from", $("#rg-from").value);
+  if ($("#rg-to").value) q.set("date_to", $("#rg-to").value);
+  return q;
+};
+const numText = (v) => v == null ? `<span class="muted">—</span>` : Number(v).toLocaleString(undefined, { maximumFractionDigits: 3 });
+function openCombinedPdf() {
+  const q = rangeQuery();
+  const frame = $("#inv-frame");
+  $(".inv-view").classList.remove("table-mode");
+  frame.classList.add("loading");
+  frame.onload = () => frame.classList.remove("loading");
+  setTimeout(() => frame.classList.remove("loading"), 2500);
+  frame.src = `/api/inventory/combined.pdf?${q}#toolbar=0&navpanes=0&view=FitH`;
+  const from = $("#rg-from").value, to = $("#rg-to").value;
+  $("#inv-title").textContent = `${$("#dd-label").textContent} · ${from || to ? `${from || "…"} to ${to || "…"}` : "all days"}`;
+  const links = { "#inv-xlsx": [`/api/inventory/combined.zip?${q}`, "Excel ↓"], "#inv-pdf": [`/api/inventory/combined.pdf?${q}&download=true`, "PDF ↓"], "#inv-tab": [`/api/inventory/combined.pdf?${q}`, "Open ↗"] };
+  for (const [sel, [href]] of Object.entries(links)) { const a = $(sel); a.href = href; a.hidden = false; }
+  $("#inv-xlsx").title = "All the days' Excel files, zipped";
+  document.querySelectorAll(".inv-row").forEach((row) => row.classList.remove("active"));
+}
+async function showCombined() {
+  const q = rangeQuery();
+  const d = await api(`/inventory/combined?${q}`);
+  if (!d.rows.length) { toast("No reports in these dates"); return; }
+  let last = "";
+  const days = new Set(d.rows.map((r) => r.date)).size;
+  const body = d.rows.map((r) => {
+    const first = r.date !== last;
+    last = r.date;
+    return `<tr class="${first ? "day-first" : ""}"><td class="nowrap">${first ? `<b>${esc(r.date)}</b>` : ""}</td>${d.columns.map((c) => c.key === "goods" ? `<td>${esc(r.goods)}</td>` : `<td class="num">${numText(r[c.key])}</td>`).join("")}</tr>`;
+  }).join("");
+  $("#inv-table").innerHTML = `<div class="inv-table-head"><div class="grow"><b>${esc(d.name)}</b>
+      <div class="muted" style="font-size:12px">${esc(d.rows[0].date)} → ${esc(d.rows[d.rows.length - 1].date)} · ${days} day${days === 1 ? "" : "s"} · ${d.rows.length} lines</div></div>
+      <a class="btn" href="/api/inventory/combined.xlsx?${q}">Download Excel</a>
+      <button type="button" data-action="inv-table-close">Close</button></div>
+    <div class="table-wrap"><table class="inv-combined"><thead><tr><th>Date</th>${d.columns.map((c) => `<th class="${c.key === "goods" ? "" : "num"}">${esc(c.label)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
+  $(".inv-view").classList.add("table-mode");
+}
+
 /* ---------- Stock Reports: open a report in the page ---------- */
 const refUrl = (ref) => "/api/inventory/file/" + ref.split("/").map(encodeURIComponent).join("/");
 function openReport(ref, name, xlsx = true) {
   const frame = $("#inv-frame");
   if (!frame) return;
+  $(".inv-view").classList.remove("table-mode");
   frame.classList.add("loading");
   frame.onload = () => frame.classList.remove("loading");
   setTimeout(() => frame.classList.remove("loading"), 1500);  // a PDF viewer may not fire load
-  frame.src = refUrl(ref) + ".pdf";
+  // The viewer's own dark toolbar and thumbnail pane are hidden; the page fits the width and starts at the top.
+  frame.src = refUrl(ref) + ".pdf#toolbar=0&navpanes=0&view=FitH";
   $("#inv-title").textContent = name;
   const links = { "#inv-xlsx": [refUrl(ref) + ".xlsx", xlsx], "#inv-pdf": [refUrl(ref) + ".pdf?download=true", true], "#inv-tab": [refUrl(ref) + ".pdf", true] };
   for (const [sel, [href, show]] of Object.entries(links)) { const a = $(sel); a.href = href; a.hidden = !show; }
@@ -956,6 +1297,7 @@ function switchFirm(index) {
   }, 110);
   history.replaceState(null, "", "#inventory/" + encodeURIComponent(target.dataset.key));
   openFirstReport();
+  applyRange();  // the chosen days apply to this factory's list too
 }
 
 const closeDropdown = () => {
@@ -1008,7 +1350,7 @@ async function render({ quiet = false } = {}) {
   }
 }
 
-async function refreshSidebar() {
+async function refreshSidebar({ warnWhatsApp = false } = {}) {
   try {
     const [o, s] = await Promise.all([api("/overview"), api("/status")]);
     const setCount = (el, n) => { el.hidden = !n; el.textContent = n; };
@@ -1019,6 +1361,7 @@ async function refreshSidebar() {
     const waOk = wa ? wa.status === "ready" : s.whatsapp.provider === "meta";
     $("#dot-wa").className = "dot " + (waOk ? "ok" : "bad");
     $("#foot-wa").textContent = wa ? "· " + wa.status : "· " + s.whatsapp.provider;
+    if (warnWhatsApp && !waOk) toast("WhatsApp is not connected. Please connect WhatsApp, or no prompts can be sent.", 8000, "warn");
   } catch { /* sidebar status is best-effort */ }
 }
 
@@ -1038,7 +1381,7 @@ document.addEventListener("change", (ev) => {
 });
 
 document.addEventListener("click", async (ev) => {
-  const row = ev.target.closest("tr[data-href]");
+  const row = ev.target.closest("tr[data-href], .mail-card[data-href]");
   if (row && row.dataset.href && !ev.target.closest("a, button, input, .sel-col")) { location.hash = row.dataset.href; return; }
   const btn = ev.target.closest("button[data-action]");
   if (!btn) return;
@@ -1047,6 +1390,18 @@ document.addEventListener("click", async (ev) => {
     if (navigatedInApp) history.back(); else location.hash = "#overview";
     return;
   }
+  if (btn.dataset.action === "inv-range") {
+    const days = Number(btn.dataset.days);
+    $("#rg-from").value = days ? dayText(new Date(Date.now() - (days - 1) * 86400000)) : "";
+    $("#rg-to").value = days ? dayText(new Date()) : "";
+    document.querySelectorAll("[data-action=inv-range]").forEach((b) => b.classList.toggle("active", b === btn));
+    applyRange();
+    if ($(".inv-view").classList.contains("table-mode")) await showCombined().catch((e) => toast("Error: " + e.message));
+    return;
+  }
+  if (btn.dataset.action === "inv-bankpdf") { openCombinedPdf(); return; }
+  if (btn.dataset.action === "inv-table") { await showCombined().catch((e) => toast("Error: " + e.message)); return; }
+  if (btn.dataset.action === "inv-table-close") { $(".inv-view").classList.remove("table-mode"); return; }
   if (btn.dataset.action === "inv-open") { openReport(btn.dataset.ref, btn.dataset.name, btn.dataset.xlsx === "1"); return; }
   if (btn.dataset.action === "inv-delete" && !(await askDialog({
     title: "Delete this report?", confirmLabel: "Delete",
@@ -1081,9 +1436,9 @@ document.addEventListener("click", async (ev) => {
     clearConfirm = "DELETE";
   }
   if (btn.dataset.action === "delete-selected") {
-    const ne = sel.emails.size, ni = sel.invoices.size;
-    const count = [ne && `${ne} email${ne > 1 ? "s" : ""}`, ni && `${ni} file${ni > 1 ? "s" : ""}`].filter(Boolean);
-    const lines = [ne && `<b>${ne} email${ne > 1 ? "s" : ""}</b> and everything read from ${ne > 1 ? "them" : "it"}`, ni && `<b>${ni} extracted file${ni > 1 ? "s" : ""}</b>`].filter(Boolean);
+    const ne = sel.emails.size, ni = sel.invoices.size, nm = sel.messages.size;
+    const count = [ne && `${ne} email${ne > 1 ? "s" : ""}`, ni && `${ni} file${ni > 1 ? "s" : ""}`, nm && `${nm} message${nm > 1 ? "s" : ""}`].filter(Boolean);
+    const lines = [ne && `<b>${ne} email${ne > 1 ? "s" : ""}</b> and everything read from ${ne > 1 ? "them" : "it"}`, ni && `<b>${ni} extracted file${ni > 1 ? "s" : ""}</b>`, nm && `<b>${nm} WhatsApp message${nm > 1 ? "s" : ""}</b> from the log`].filter(Boolean);
     if (!(await askDialog({
       title: `Delete ${count.join(" and ")}?`, confirmLabel: "Delete selected",
       body: `<p>This removes ${lines.join(" and ")} from the dashboard.</p><p>It cannot be undone.</p>${keepNote}`,
@@ -1093,6 +1448,18 @@ document.addEventListener("click", async (ev) => {
   if (btn.dataset.action === "reparse" && btn.dataset.status === "CONFIRMED" && !(await askDialog({
     title: "Read this document again?", confirmLabel: "Read again", danger: false,
     body: `<p>This document is already saved to the Google Sheet.</p><p>It will be read again and a new WhatsApp prompt sent. Answering YES again adds it to the Sheet a second time (and sends the stock report).</p>`,
+  }))) return;
+  if (btn.dataset.action === "msg-clear" && !(await askDialog({
+    title: "Clear the whole message log?", confirmLabel: "Clear log",
+    body: `<p>This removes <b>all ${esc(btn.dataset.count)} WhatsApp messages</b> from the log shown here.</p><p>It cannot be undone.</p><div class="keep">Nothing is deleted from WhatsApp itself, and prompts still waiting for a reply can still be answered.</div>`,
+  }))) return;
+  if (btn.dataset.action === "msg-delete" && !(await askDialog({
+    title: "Delete this message?", confirmLabel: "Delete",
+    body: `<p>It is removed from the log shown here only, not from WhatsApp.</p>`,
+  }))) return;
+  if (btn.dataset.action === "goods-clear" && !(await askDialog({
+    title: "Forget these figures?", confirmLabel: "Forget",
+    body: `<p><b>${esc(btn.dataset.name)}</b></p><p>Its margin, weight and rate are removed. The next invoice of these goods will ask for them again. Reports already made are not changed.</p>`,
   }))) return;
   if (btn.dataset.action === "cad-remove" && !(await askDialog({
     title: "Remove this person?", confirmLabel: "Remove",
@@ -1117,6 +1484,9 @@ document.addEventListener("click", async (ev) => {
       toast("The AI is reading the sample… this takes a few seconds");
       await api(`/stock-templates/${encodeURIComponent(btn.dataset.id)}/review`, { method: "POST" });
       toast("Read again. Check the layout and use Preview PDF");
+    } else if (btn.dataset.action === "goods-clear") {
+      await api(`/factories/${encodeURIComponent(btn.dataset.customer)}/${encodeURIComponent(btn.dataset.goods)}`, { method: "DELETE" });
+      toast("Forgotten. It will be asked for again on the next invoice");
     } else if (btn.dataset.action === "cad-remove") {
       await api(`/cad/${btn.dataset.id}`, { method: "DELETE" });
       toast(`Removed ${btn.dataset.address}`);
@@ -1147,10 +1517,19 @@ document.addEventListener("click", async (ev) => {
       toast("Deleted");
       if (location.hash.startsWith("#invoice/")) { location.hash = "#invoices"; return; }
     } else if (btn.dataset.action === "delete-selected") {
-      const r = await api("/data/delete", { method: "POST", body: { emails: [...sel.emails].map(Number), invoices: [...sel.invoices].map(Number) } });
-      sel.emails.clear(); sel.invoices.clear();
+      const r = await api("/data/delete", { method: "POST", body: { emails: [...sel.emails].map(Number), invoices: [...sel.invoices].map(Number), messages: [...sel.messages].map(Number) } });
+      sel.emails.clear(); sel.invoices.clear(); sel.messages.clear();
       Object.keys(contentCache).forEach((k) => delete contentCache[k]);
-      toast(`Deleted ${r.emails} email${r.emails === 1 ? "" : "s"} and ${r.invoices} file${r.invoices === 1 ? "" : "s"}`);
+      toast(r.messages && !r.emails && !r.invoices ? `Deleted ${r.messages} message${r.messages === 1 ? "" : "s"}`
+        : `Deleted ${r.emails} email${r.emails === 1 ? "" : "s"} and ${r.invoices} file${r.invoices === 1 ? "" : "s"}${r.messages ? ` and ${r.messages} message${r.messages === 1 ? "" : "s"}` : ""}`);
+    } else if (btn.dataset.action === "msg-delete") {
+      await api("/data/delete", { method: "POST", body: { messages: [Number(btn.dataset.id)] } });
+      sel.messages.delete(btn.dataset.id);
+      toast("Message deleted");
+    } else if (btn.dataset.action === "msg-clear") {
+      const r = await api("/whatsapp/messages/clear", { method: "POST" });
+      sel.messages.clear();
+      toast(`Message log cleared (${r.messages} deleted)`);
     } else if (btn.dataset.action === "delete-email") {
       await api(`/emails/${btn.dataset.id}`, { method: "DELETE" });
       toast("Email deleted");
@@ -1199,6 +1578,23 @@ document.addEventListener("submit", async (ev) => {
 });
 
 document.addEventListener("submit", async (ev) => {
+  if (!ev.target.classList.contains("goods-form")) return;
+  ev.preventDefault();
+  const form = ev.target, btn = form.querySelector("button[type=submit]");
+  btn.disabled = true;
+  try {
+    const body = Object.fromEntries(["margin_pct", "weight_per_unit", "weight_measurement", "rate_per_unit"].map((k) => [k, form[k].value]));
+    await api(`/factories/${encodeURIComponent(form.dataset.customer)}/${encodeURIComponent(form.dataset.goods)}`, { method: "PUT", body });
+    toast("Saved. Used from the next invoice");
+    await render({ quiet: true });
+  } catch (e) {
+    toast("Error: " + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.addEventListener("submit", async (ev) => {
   if (ev.target.id !== "cad-form") return;
   ev.preventDefault();
   const form = ev.target, btn = form.querySelector("button");
@@ -1231,11 +1627,17 @@ document.addEventListener("submit", async (ev) => {
   }
 });
 
+document.addEventListener("change", (ev) => {
+  if (!ev.target.matches("#rg-from, #rg-to")) return;
+  document.querySelectorAll("[data-action=inv-range]").forEach((b) => b.classList.remove("active"));
+  applyRange();
+});
+
 // False until the first in-app navigation: Back then has a page of ours to return to.
 let navigatedInApp = false;
-window.addEventListener("hashchange", () => { navigatedInApp = true; sel.emails.clear(); sel.invoices.clear(); render(); });
+window.addEventListener("hashchange", () => { navigatedInApp = true; sel.emails.clear(); sel.invoices.clear(); sel.messages.clear(); render(); });
 render();
-refreshSidebar();
+refreshSidebar({ warnWhatsApp: true });
 // Live-ish: pick up new emails, replies and delivery ticks without a manual reload.
 // On the Overview, check a cheap fingerprint every 2 s and re-render as soon
 // as it changes (new email, next processing step, WhatsApp tick). Other pages
@@ -1243,7 +1645,7 @@ refreshSidebar();
 let tick = 0, lastVersion = null;
 setInterval(async () => {
   // Don't re-render under the user: an open <details> or a field being typed in.
-  if (document.hidden || location.hash === "#formats" || location.hash === "#cad" || location.hash.startsWith("#inventory") || document.querySelector("details[open]") || document.activeElement?.matches("input, textarea")) return;
+  if (document.hidden || location.hash === "#formats" || location.hash === "#cad" || location.hash === "#factories" || location.hash.startsWith("#inventory") || document.querySelector("details[open]") || document.activeElement?.matches("input, textarea")) return;
   tick += 1;
   const onOverview = (location.hash.slice(1) || "overview").startsWith("overview");
   if (onOverview) {

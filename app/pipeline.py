@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session, object_session
 from app.bank_registry import BANK_EMAIL_DOMAINS, BANK_REGISTRY, BankProfile, bank_identity, profile_by_code
 from app.config import settings
 from app.formatting import amount_line, enclosed_documents, format_items
+from app.services import stock_update
 from app.models import CadContact, GmailSyncState, InvoiceRecord, InvoiceStatus, ProcessedEmail, StatementTransaction
 from app.parsers.base import ExtractedInvoice
 from app.parsers.llm_parser import LlmInvoiceParser, LlmParseError
@@ -377,6 +378,33 @@ def extract_document(db: Session, record: InvoiceRecord, doc: Document | None = 
     if extracted.extra.get("is_account_statement"):
         return _skip_statement(record)
 
+    # The same reference as a delivery order already confirmed, now with the figures that one lacked: its figures
+    # go into that order and its stock report is made again — no second prompt (see app/services/stock_update.py).
+    order = extracted.extra.get("delivery_order")
+    earlier = stock_update.find_existing(db, record, order) if order else None
+    applied = stock_update.merge(earlier, order) if earlier else []
+    if applied:
+        reason = f"Added to the earlier order #{earlier.id}: its figures were added and its stock report updated"
+        record.raw_extracted_json = json.dumps(
+            {**json.loads(record.raw_extracted_json), "classification_reason": reason, "merged_into": earlier.id, "merged_applied": applied}
+        )
+        record.status = InvoiceStatus.MERGED
+        logger.info("%s: %s", record.pdf_filename, reason)
+        return "merged"
+
+    # Only figures (rate, margin, weight…) for a known factory's goods, no order to add them to: they are kept for its goods.
+    if order and not applied and stock_update.figures_only(order):
+        saved = stock_update.save_from_order(db, order)
+        if saved:
+            factory, notes = saved
+            reason = f"Figures saved for {factory}: " + "; ".join(notes)
+            record.raw_extracted_json = json.dumps(
+                {**json.loads(record.raw_extracted_json), "classification_reason": reason, "profile_saved": notes, "factory": factory}
+            )
+            record.status = InvoiceStatus.MERGED
+            logger.info("%s: %s", record.pdf_filename, reason)
+            return "merged"
+
     if not _is_bank(extracted):
         record.status = InvoiceStatus.NOT_BANK
         logger.info("%s is not a bank document — nothing sent", record.pdf_filename)
@@ -386,7 +414,7 @@ def extract_document(db: Session, record: InvoiceRecord, doc: Document | None = 
     if other:
         reason = f"Addressed to {other}, not {settings.stock_addressee_list[0]} — not ours, skipped"
         extracted.extra["classification_reason"] = reason
-        record.raw_extracted_json = json.dumps({**json.loads(record.raw_extracted_json), "classification_reason": reason})
+        record.raw_extracted_json = json.dumps({**json.loads(record.raw_extracted_json), "classification_reason": reason, "not_ours": True})
         record.status = InvoiceStatus.NOT_BANK
         logger.info("%s: %s", record.pdf_filename, reason)
         return "not_bank"

@@ -173,6 +173,16 @@ class PdfRequest:
 
 
 @dataclass
+class FiguresRequest:
+    sender_phone: str
+    target_label: str | None  # "16" from "report 16" / "#16" in the text
+    quoted_message_id: str | None  # the stock report message this replies to, if any
+    message_id: str
+    text: str
+    figures: list[tuple[str, str, str]]  # (field, goods name or "", number)
+
+
+@dataclass
 class Reaction:
     message_id: str  # the message that was reacted to (our prompt)
     answer: str  # "yes" / "no"
@@ -189,6 +199,22 @@ _PDF_RE = re.compile(
     r"(original\s+|source\s+)?(?:pdf|file|document|invoice|report)\s*(?:for|of)?\s*#?\s*(t?\d+)?\s*[.!]?\s*$",
     re.IGNORECASE,
 )
+
+# Figures for a stock report, typed as a reply to it: "rate 3800", "rate wheat 3800", "drums 120",
+# "Weight Per Unit 220", "margin 5%" — one per line (or separated by ; or ,).
+_FIGURE_FIELD = (
+    r"(?P<weight_measurement>weight\s*measure(?:ment)?(?:\s*per\s*unit)?)"
+    r"|(?P<weight_per_unit>weight(?:\s*per\s*unit)?)"
+    r"|(?P<drums>(?:(?:no|number)\.?\s*of\s*)?drums?)"
+    r"|(?P<rate>rate(?:\s*per\s*unit)?|price)"
+    r"|(?P<margin>margin(?:\s*(?:%|percent(?:age)?))?)"
+)
+_FIGURE_RE = re.compile(
+    rf"^(?P<pre>[^\d\n]*?)(?:{_FIGURE_FIELD})(?![a-z])(?P<mid>[^\d\n]*?)[:=\-]?\s*(?P<num>\d[\d,]*(?:\.\d+)?)\s*(?:%|[a-z./]{{0,6}})\W*$",
+    re.IGNORECASE,
+)
+_FIGURE_NAMES = ("weight_measurement", "weight_per_unit", "drums", "rate", "margin")
+_REPORT_LABEL_RE = re.compile(r"(?:report|record|#)\s*#?\s*(\d+)", re.IGNORECASE)
 
 # Skin-tone variants of 👍/👎 arrive with a modifier appended, so compare the
 # base character only.
@@ -306,6 +332,37 @@ def parse_pdf_request(webhook_payload: dict) -> PdfRequest | None:
         message_id=data.get("id", ""),
         text=body,
         original=bool(original),
+    )
+
+
+def parse_figures_request(webhook_payload: dict) -> FiguresRequest | None:
+    """Figures for a stock report ("rate wheat 3800", "drums 120"…) sent as a reply to it, or naming it
+    ("report 16"). None for anything else, including a message with no figure in it."""
+    if webhook_payload.get("event") != "message.received":
+        return None
+    data = webhook_payload.get("data") or {}
+    if data.get("fromMe") or data.get("isGroup") or data.get("isStatusBroadcast"):
+        return None
+    body = data.get("body") or ""
+    figures = []
+    for line in re.split(r"[;\n]|,\s*(?=[A-Za-z])", body):
+        match = _FIGURE_RE.match(line.strip())
+        if not match:
+            continue
+        field = next(name for name in _FIGURE_NAMES if match.group(name))
+        goods = re.sub(r"^(?:for|of|is|per unit)\s+", "", match.group("mid").strip(" :=-"), flags=re.IGNORECASE).strip()
+        goods = goods or re.sub(r"[^\w ]", " ", match.group("pre")).strip()  # "ABC wheat margin 5": the words before the figure
+        figures.append((field, goods, match.group("num").replace(",", "")))
+    if not figures:
+        return None
+    label = _REPORT_LABEL_RE.search(body)
+    return FiguresRequest(
+        sender_phone=_sender_phone(data),
+        target_label=label.group(1) if label else None,
+        quoted_message_id=(data.get("quotedMessage") or {}).get("id"),
+        message_id=data.get("id", ""),
+        text=body,
+        figures=figures,
     )
 
 

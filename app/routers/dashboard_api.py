@@ -433,12 +433,25 @@ def delete_email(email_id: int, db: Session = Depends(get_db)):
 class DeleteSelectedRequest(BaseModel):
     emails: list[int] = []
     invoices: list[int] = []
+    messages: list[int] = []  # WhatsApp message-log rows
+
+
+@router.post("/whatsapp/messages/clear")
+def clear_messages(db: Session = Depends(get_db)):
+    """Empties the WhatsApp message log. Prompts stay answerable: replies are matched
+    through the record's own message id, not through this log."""
+    deleted = db.query(WhatsAppMessage).delete(synchronize_session=False)
+    db.commit()
+    return {"messages": deleted}
 
 
 @router.post("/data/delete")
 def delete_selected(body: DeleteSelectedRequest, db: Session = Depends(get_db)):
-    """Deletes the emails and extracted files ticked on the dashboard. An email
-    goes with everything read from it; ids already gone are skipped."""
+    """Deletes the emails, extracted files and WhatsApp log rows ticked on the dashboard.
+    An email goes with everything read from it; ids already gone are skipped."""
+    messages = 0
+    if body.messages:
+        messages = db.query(WhatsAppMessage).filter(WhatsAppMessage.id.in_(set(body.messages))).delete(synchronize_session=False)
     paths: list[str] = []
     emails = 0
     for email_id in dict.fromkeys(body.emails):
@@ -459,7 +472,7 @@ def delete_selected(body: DeleteSelectedRequest, db: Session = Depends(get_db)):
     db.commit()
     for path in paths:
         _remove_file(path)
-    return {"emails": emails, "invoices": invoices}
+    return {"emails": emails, "invoices": invoices, "messages": messages}
 
 
 class ClearRequest(BaseModel):

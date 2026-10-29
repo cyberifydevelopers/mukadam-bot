@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -20,6 +20,9 @@ class InvoiceStatus(str, enum.Enum):
     # A bank account statement — not tracked (only invoices / bank documents
     # are), so nothing is sent or saved.
     STATEMENT = "STATEMENT"
+    # A follow-up letter with the same reference as a delivery order already confirmed: its figures were
+    # added to that order (app/services/stock_update.py), so it gets no prompt of its own.
+    MERGED = "MERGED"
 
 
 class GmailSyncState(Base):
@@ -62,6 +65,24 @@ class CadContact(Base):
     address: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class GoodsProfile(Base):
+    """Figures kept per customer and goods (margin, weight, rate), asked for once and then reused on every later
+    invoice of that customer's goods — see app/services/goods_profiles.py."""
+
+    __tablename__ = "goods_profiles"
+    __table_args__ = (UniqueConstraint("customer_key", "goods_key", name="uq_goods_profile"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    customer_key: Mapped[str] = mapped_column(String(128), index=True)
+    goods_key: Mapped[str] = mapped_column(String(64))
+    customer_name: Mapped[str] = mapped_column(String(255), nullable=True)
+    margin_pct: Mapped[str] = mapped_column(String(32), nullable=True)
+    weight_per_unit: Mapped[str] = mapped_column(String(32), nullable=True)
+    weight_measurement: Mapped[str] = mapped_column(String(32), nullable=True)
+    rate_per_unit: Mapped[str] = mapped_column(String(32), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class ProcessedEmail(Base):

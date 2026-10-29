@@ -316,8 +316,8 @@ def fill(job):
                 if isinstance(value, (int, float)):
                     cell.setValue(value)
                 elif value.startswith("="):
-                    if _is_formula(cell):
-                        continue  # the sample's own calculation stays
+                    if _is_formula(cell) and name not in job.get("force", ()):
+                        continue  # the sample's own calculation stays (unless the job says it is to be replaced)
                     cell.setFormula(value)
                 else:
                     cell.setString(value)

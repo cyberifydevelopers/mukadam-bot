@@ -20,7 +20,7 @@ from app.confirmation import (
 )
 from app.database import SessionLocal
 from app.models import InvoiceRecord, InvoiceStatus, StatementTransaction, WhatsAppMessage
-from app.services import openwa_service, stock_report
+from app.services import stock_update, openwa_service, stock_report
 from app.services.message_log import apply_delivery_status, log_message
 
 logger = logging.getLogger(__name__)
@@ -147,6 +147,71 @@ def _send_stock_report(db: Session, record: InvoiceRecord) -> None:
             error=error,
             invoice_id=record.id,
         )
+
+
+def _record_for_quote(db: Session, quoted_id: str | None) -> InvoiceRecord | None:
+    """The document a quoted message belongs to: the prompt itself, or a stock report sent for it."""
+    if not quoted_id:
+        return None
+    target = find_by_message_id(db, quoted_id)
+    if isinstance(target, StatementTransaction):
+        target = db.get(InvoiceRecord, target.invoice_id)
+    if target is not None:
+        return target
+    row = db.query(WhatsAppMessage).filter(WhatsAppMessage.message_id == quoted_id, WhatsAppMessage.invoice_id.isnot(None)).first()
+    return db.get(InvoiceRecord, row.invoice_id) if row else None
+
+
+def _handle_figures_request(db: Session, request: openwa_service.FiguresRequest) -> dict:
+    """"rate wheat 3800 / drums 120" sent as a reply to a stock report: the figures are stored on that
+    document's stock lines and the report is made again with them. Only the approver numbers can send them."""
+    if not request.sender_phone or request.sender_phone not in {_digits(n) for n in settings.notify_numbers_list}:
+        return {"status": "ignored"}
+    if request.message_id and (
+        db.query(WhatsAppMessage.id).filter_by(direction="in", message_id=request.message_id).first()
+    ):
+        return {"status": "duplicate"}
+
+    record = _record_for_quote(db, request.quoted_message_id)
+    if record is None and request.target_label:
+        record = db.get(InvoiceRecord, int(request.target_label))
+    log_message(
+        db, direction="in", provider="openwa", peer_number=request.sender_phone, text=request.text,
+        status="received", message_id=request.message_id, **_link_ids(record),
+    )
+    if record is None:
+        factory = stock_update.factory_in_text(db, request.text)
+        if factory:
+            notes = stock_update.save_profile_figures(db, factory[0], factory[1], request.figures)
+            db.commit()
+            if notes:
+                reply = [f"Saved for {factory[1]}:", *(f"• {n}" for n in notes), "", "Used from the next invoice of these goods."]
+            else:
+                reply = [f"I couldn't tell which goods these are for {factory[1]}. Write e.g. \"{factory[1]} wheat margin 5\"."]
+            _send_logged(db, request.sender_phone, "\n".join(reply), None)
+            db.commit()
+            return {"status": "ok"}
+        _send_logged(db, request.sender_phone, "Which report or factory is this for? Reply to the stock report, or write e.g. \"report 16\" or \"ABC Factory wheat margin 5\" with the figures.", None)
+        db.commit()
+        return {"status": "ok"}
+    if not stock_report.delivery_order(record):
+        _send_logged(db, request.sender_phone, f"#{record.id} has no stock report, so there is nothing to add these to.", record)
+        db.commit()
+        return {"status": "ok"}
+
+    applied, unmatched = stock_report.apply_figures(record, request.figures)
+    db.commit()
+    lines = [f"Got it for #{record.id}:", *(f"• {a}" for a in applied)]
+    if unmatched:
+        lines += ["", "Couldn't find these goods on the report: " + "; ".join(unmatched)]
+    if applied:
+        lines += ["", "Making the updated report…"]
+    _send_logged(db, request.sender_phone, "\n".join(lines), record)
+    db.commit()
+    if applied:
+        _send_stock_report(db, record)
+        db.commit()
+    return {"status": "ok"}
 
 
 def _handle_pdf_request(db: Session, request: openwa_service.PdfRequest) -> dict:
@@ -312,6 +377,9 @@ def _handle_payload(db: Session, payload: dict) -> dict:
 
     if pdf_request := openwa_service.parse_pdf_request(payload):
         return _handle_pdf_request(db, pdf_request)
+
+    if figures_request := openwa_service.parse_figures_request(payload):
+        return _handle_figures_request(db, figures_request)
 
     reply = openwa_service.parse_reply(payload)
     if reply is None:

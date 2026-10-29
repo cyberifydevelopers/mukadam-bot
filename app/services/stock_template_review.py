@@ -26,7 +26,7 @@ from openai import APIError
 from openpyxl.utils import get_column_letter
 
 from app.config import settings
-from app.parsers.llm_parser import LlmParseError, _api_error, openrouter_client
+from app.parsers.llm_parser import LlmParseError, _api_error, chat_with_fallback, openrouter_client
 from app.services import stock_report, stock_templates
 from app.services.stock_templates import Template
 
@@ -207,8 +207,8 @@ def _llm(dump: str, original_name: str, customer_hint: str) -> dict:
         + dump
     )
     try:
-        response = openrouter_client().chat.completions.create(
-            model=settings.llm_extraction_model,
+        response = chat_with_fallback(
+            openrouter_client(),
             temperature=0,
             tools=[{"type": "function", "function": _FUNCTION}],
             tool_choice=_TOOL_CHOICE,

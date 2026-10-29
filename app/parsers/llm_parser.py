@@ -190,7 +190,9 @@ _FUNCTION = {
                     "subject, or a 'Point of Delivery' / 'Product of Istisna' / disbursement table of stock the "
                     "bank has financed, means the goods are being DELIVERED INTO our godown — quantity_received, "
                     "never quantity_released. null for "
-                    "anything else, e.g. a collection-of-documents notice."
+                    "anything else, e.g. a collection-of-documents notice. A bank's FOLLOW-UP to an earlier delivery order — the same "
+                    "reference, now giving the missing figures (rate, margin %, drums, weight) — is filled in too, with its goods "
+                    "and those figures per line."
                 ),
                 "properties": {
                     "addressed_to": {
@@ -273,6 +275,13 @@ _FUNCTION = {
                                         "(a delivery order has none)"
                                     ),
                                 },
+                                "margin_pct": {
+                                    "type": ["string", "null"],
+                                    "description": "Margin % for this line, digits only (e.g. '5' for '5%'); null when not given",
+                                },
+                                "drums": {"type": ["string", "null"], "description": "'No of Drums' for this line, digits only; null when not given"},
+                                "weight_per_unit": {"type": ["string", "null"], "description": "'Weight Per Unit' for this line, digits only (e.g. '50' for 50 kg); null when not given"},
+                                "weight_measurement": {"type": ["string", "null"], "description": "'Weight Measurement Per Unit' for this line, digits only; null when not given"},
                                 "opening_balance": {"type": ["string", "null"], "description": "Balance in hand before this delivery ('Opening')"},
                                 "quantity_received": {
                                     "type": ["string", "null"],
@@ -373,7 +382,11 @@ _EMAIL_INSTRUCTION = (
     "chat, and a customer's own email to a bank are NOT bank documents. The issuing bank is "
     "the original author's bank (e.g. @habibmetro.com → 'Habib Metropolitan Bank'). If no "
     "bank can be identified — no bank domain, name, signature or logo — it is NOT a bank "
-    "document, however bank-like the wording (e.g. 'Trade Services'). Extract "
+    "document, however bank-like the wording (e.g. 'Trade Services'). EXCEPTION: a short message or picture that "
+    "only gives missing figures for goods already in stock — rate, margin %, drums, weight, e.g. 'Syed Flour "
+    "Mills: rate 3800, margin 5%' — is a follow-up to a delivery order: fill delivery_order for it (customer_name, "
+    "one row per goods line with those figures, and the reference_number when the message names one) even when "
+    "no bank can be identified. Extract "
     "the fields from that "
     "original message (receiver = who it was addressed to). Use null for anything not "
     "actually present — do not guess or estimate.\n\n"
@@ -446,6 +459,21 @@ def openrouter_client() -> OpenAI:
     return _client
 
 
+def chat_with_fallback(client: OpenAI, **kwargs):
+    """chat.completions.create with the primary model, then once more with
+    LLM_FALLBACK_MODEL when the call fails for a reason a retry can fix (busy,
+    provider down, dropped connection). A rejected key (401) or no credits (402)
+    would fail the same way again, so those are raised straight away."""
+    try:
+        return client.chat.completions.create(model=settings.llm_extraction_model, **kwargs)
+    except APIError as exc:
+        fallback = settings.llm_fallback_model.strip()
+        if not fallback or getattr(exc, "status_code", None) in (401, 402):
+            raise
+        logger.warning("%s failed (%s) — trying the fallback model %s", settings.llm_extraction_model, exc, fallback)
+        return client.chat.completions.create(model=fallback, **kwargs)
+
+
 class LlmInvoiceParser:
     def _client_or_raise(self) -> OpenAI:
         return openrouter_client()
@@ -486,8 +514,8 @@ class LlmInvoiceParser:
             content = [{"type": "text", "text": content}, *(_image_part(p) for p in image_paths)]
 
         try:
-            response = client.chat.completions.create(
-                model=settings.llm_extraction_model,
+            response = chat_with_fallback(
+                client,
                 temperature=0,
                 tools=_TOOLS,
                 tool_choice=_TOOL_CHOICE,
@@ -514,8 +542,8 @@ class LlmInvoiceParser:
         encoded = base64.standard_b64encode(pdf_bytes).decode("ascii")
 
         try:
-            response = client.chat.completions.create(
-                model=settings.llm_extraction_model,
+            response = chat_with_fallback(
+                client,
                 temperature=0,
                 tools=_TOOLS,
                 tool_choice=_TOOL_CHOICE,

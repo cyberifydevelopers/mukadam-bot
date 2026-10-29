@@ -30,7 +30,7 @@ import openpyxl
 
 from app.config import settings
 from app.models import InvoiceRecord
-from app.services import stock_templates
+from app.services import goods_profiles, stock_templates
 from app.services.stock_templates import Template
 
 logger = logging.getLogger(__name__)
@@ -63,6 +63,7 @@ class StockReport:
     customer: str
     template: str
     missing: list[str] = field(default_factory=list)  # what the document didn't give, in words for the approver
+    used: list[str] = field(default_factory=list)  # what was filled in from earlier invoices of the same customer's goods
 
 
 def delivery_order(record: InvoiceRecord) -> dict | None:
@@ -202,6 +203,61 @@ def match_lines(rows: list[dict], previous: dict[int, str]) -> list[int | None]:
     return found
 
 
+def _extra_columns(template: Template) -> dict[str, str]:
+    """Columns the format has for figures the bot doesn't map (drums, weight, weight measurement), found by
+    their heading in the row above the stock lines. Only for .xlsx formats; {} when none are found."""
+    path = stock_templates.templates_dir() / template.file
+    if path.suffix.lower() != ".xlsx" or not path.exists():
+        return {}
+    found: dict[str, str] = {}
+    try:
+        sheet = openpyxl.load_workbook(path, read_only=True).worksheets[0]
+        header_row = template.first_row - 1
+        for cell in next(sheet.iter_rows(min_row=header_row, max_row=header_row), ()):
+            text = re.sub(r"\s+", " ", str(cell.value or "")).strip().lower()
+            column = getattr(cell, "column_letter", None)
+            if not text or not column:
+                continue
+            if "drum" in text:
+                found.setdefault("drums", column)
+            elif "weight" in text and "measure" in text:
+                found.setdefault("weight_measurement", column)
+            elif "weight" in text:
+                found.setdefault("weight_per_unit", column)
+    except Exception:  # noqa: BLE001 — without them the report is still made, just without those cells
+        logger.exception("Couldn't read the headings of %s", template.file)
+        return {}
+    return found
+
+
+FIGURE_KEYS = {"rate": "rate_per_unit", "margin": "margin_pct", "drums": "drums", "weight_per_unit": "weight_per_unit", "weight_measurement": "weight_measurement"}
+FIGURE_NAMES = {"rate": "Rate per unit", "margin": "Margin %", "drums": "No of drums", "weight_per_unit": "Weight per unit", "weight_measurement": "Weight measurement per unit"}
+
+
+def apply_figures(record: InvoiceRecord, figures: list[tuple[str, str, str]]) -> tuple[list[str], list[str]]:
+    """Stores figures the approver typed on WhatsApp — (field, goods name or "", number) — on the document's
+    stock lines: the line(s) whose description contains the goods name, or every line when none is named.
+    The next report built for this record then carries them. Returns (what was applied, what matched nothing)."""
+    raw = json.loads(record.raw_extracted_json or "{}")
+    order = raw.get("delivery_order") or {}
+    rows = order.get("rows") or []
+    applied, unmatched = [], []
+    for field, goods, value in figures:
+        words = [w for w in re.findall(r"[a-z0-9]+", goods.lower()) if len(w) > 1]
+        hit = [row for row in rows if not words or any(w in (row.get("description") or "").lower() for w in words)]
+        if not hit and len(rows) == 1:
+            hit = rows  # one goods line: the figure can only be for it, however the message worded the goods
+        if not hit:
+            unmatched.append(f"{FIGURE_NAMES[field]} for \"{goods}\"")
+            continue
+        for row in hit:
+            row[FIGURE_KEYS[field]] = value
+        applied.append(f"{FIGURE_NAMES[field]}{f' ({goods})' if goods else ''}: {value}")
+    raw["delivery_order"] = order
+    record.raw_extracted_json = json.dumps(raw)
+    return applied, unmatched
+
+
 def build_job(template: Template, order: dict, dated: datetime, previous: dict | None = None) -> dict:
     """What stock_report_uno.py writes into the sample. Extra stock lines
     are inserted below the sample's last line, and its TOTAL row's SUM
@@ -259,6 +315,7 @@ def build_job(template: Template, order: dict, dated: datetime, previous: dict |
         }
 
     values = job["values"]
+    extra = _extra_columns(t)
 
     def put(cell: str, value, format_from: str | None = None) -> None:
         values.append([cell, value, format_from] if format_from else [cell, value])
@@ -303,16 +360,33 @@ def build_job(template: Template, order: dict, dated: datetime, previous: dict |
             if convert:
                 rate = round(rate * per * settings.usd_pkr_rate, 2)
             put(f"{t.rate}{r}", rate, f"{t.rate}{t.first_row}")
+        # Figures typed in by the approver (drums, weight…) go into their columns, wherever the format has them.
+        for key, col in extra.items():
+            number = _quantity(str(item.get(key) or ""))
+            if number is not None:
+                put(f"{col}{r}", number, f"{col}{t.first_row}")
+        pct = _quantity(str(item.get("margin_pct") or ""))
+        if pct is not None and t.margin:
+            # A margin typed in by the approver replaces the sample's own (e.g. "=L16*5%"), so its formulas are rewritten.
+            put(f"{t.margin}{r}", pct)
+            force = job.setdefault("force", [])
+            if t.less_margin:
+                put(f"{t.less_margin}{r}", f"={t.value}{r}*{t.margin}{r}/100", f"{t.less_margin}{t.first_row}")
+                force.append(f"{t.less_margin}{r}")
+            if t.dp:
+                put(f"{t.dp}{r}", f"={t.value}{r}-{t.less_margin}{r}" if t.less_margin else f"={t.value}{r}*{100 - pct}/100", f"{t.dp}{t.first_row}")
+                force.append(f"{t.dp}{r}")
         if known:
             continue
         divisor = f"/{t.value_divisor}" if t.value_divisor != 1 else ""
         put(f"{t.value}{r}", f"={t.balance}{r}*{t.rate}{r}{divisor}", f"{t.value}{t.first_row}")
-        if t.margin and t.margin_pct is not None:
-            put(f"{t.margin}{r}", t.margin_pct)
+        used_pct = t.margin_pct if pct is None else pct
+        if t.margin and used_pct is not None:
+            put(f"{t.margin}{r}", used_pct)
             put(f"{t.less_margin}{r}", f"={t.value}{r}*{t.margin}{r}/100", f"{t.less_margin}{t.first_row}")
             put(f"{t.dp}{r}", f"={t.value}{r}-{t.less_margin}{r}", f"{t.dp}{t.first_row}")
-        elif t.dp and t.margin_pct is not None:
-            put(f"{t.dp}{r}", f"={t.value}{r}*{100 - t.margin_pct}/100", f"{t.dp}{t.first_row}")
+        elif t.dp and used_pct is not None:
+            put(f"{t.dp}{r}", f"={t.value}{r}*{100 - used_pct}/100", f"{t.dp}{t.first_row}")
 
     if previous:
         return job  # the previous report already has its sentence, city and currency labels
@@ -551,6 +625,25 @@ def document_date(record: InvoiceRecord) -> datetime | None:
     return None
 
 
+_FIGURE_HEADER = re.compile(r"weight|measure|drum|rate|price|value|margin|dp|drawing", re.IGNORECASE)
+
+
+def _blank_figure_columns(sheet, template: Template, rows: list[int]) -> list[str]:
+    """Headings of the report's figure columns (weight, drums, rate, value, margin, DP…) that have nothing in any
+    stock line — those figures are not in the document. Read from the finished sheet, so a rate or margin carried
+    on from the previous report doesn't count; zeros (what a formula gives with no rate) count as empty."""
+    header_row = template.first_row - 1
+    blank = []
+    for cell in next(sheet.iter_rows(min_row=header_row, max_row=header_row), ()):
+        heading = re.sub(r"\s+", " ", str(cell.value or "")).strip()
+        if not heading or not _FIGURE_HEADER.search(heading) or not getattr(cell, "column_letter", None):
+            continue
+        values = (sheet[f"{cell.column_letter}{r}"].value for r in rows)
+        if not any(v not in (None, "", 0, 0.0, "0") and str(v).strip() not in ("", "0", "0.0") for v in values):
+            blank.append(heading)
+    return blank
+
+
 def missing_data(order: dict, template: Template, report: StockReport, dated: datetime | None) -> list[str]:
     """What the report still lacks because the document didn't give it — read back from the finished sheet, so
     a rate carried on from the previous report doesn't count as missing."""
@@ -558,15 +651,20 @@ def missing_data(order: dict, template: Template, report: StockReport, dated: da
     try:
         state = _read_state(str(Path(report.xlsx_path).with_suffix(".json"))) or {}
         sheet = openpyxl.load_workbook(report.xlsx_path, data_only=True, read_only=True).worksheets[0]
-        no_rate = []
+        rows, no_rate = [], []
         for r in range(template.first_row, max(template.last_row, state.get("last_row", 0)) + 1):
             name = next((str(v).strip() for c in (template.description, template.lc_column) if c and (v := sheet[f"{c}{r}"].value) and str(v).strip()), "")
-            if name and not sheet[f"{template.rate}{r}"].value:
-                no_rate.append(name)
+            if name:
+                rows.append(r)
+                if not sheet[f"{template.rate}{r}"].value:
+                    no_rate.append(name)
+        blank = _blank_figure_columns(sheet, template, rows) if rows else []
     except Exception:  # noqa: BLE001 — a note about gaps must never stop the report being sent
         logger.exception("Couldn't check %s for missing data", report.xlsx_path)
-        no_rate = []
-    if no_rate:
+        no_rate, blank = [], []
+    if blank:
+        notes.extend(blank)
+    elif no_rate:
         notes.append(f"Rate per unit: {', '.join(no_rate)}. Total Value, Less Margin and Drawing Power could not be worked out")
     if not (order.get("pledge_location") or "").strip():
         notes.append("Godown / pledge location")
@@ -578,9 +676,12 @@ def missing_data(order: dict, template: Template, report: StockReport, dated: da
 def caption(record: InvoiceRecord, report: StockReport) -> str:
     """The text sent with the report: what it is, and anything the document left out."""
     text = f"Stock report for #{record.id} — {report.customer}"
+    if report.used:
+        lines = "\n".join(f"• {u}" for u in report.used)
+        text += f"\n\n♻️ Filled in from what you gave earlier:\n{lines}\n(To change one, reply with e.g. \"margin 6\".)"
     if report.missing:
         lines = "\n".join(f"• {m}" for m in report.missing)
-        text += f"\n\n⚠️ Not found in the document:\n{lines}\n\nPlease send these, or fill them in the Excel sheet."
+        text += f"\n\n⚠️ These fields are not in the document:\n{lines}\n\nKindly provide them, or fill them in the Excel sheet."
     return text
 
 
@@ -591,6 +692,10 @@ def build(record: InvoiceRecord, regenerate: bool = False) -> StockReport:
     # A document confirmed again (read again after a correction) replaces its report instead of adding a second one.
     regenerate = regenerate or _own_report(record.id) is not None
     template, dated = pick_template(record, order), document_date(record)
+    # What was given once for this customer's goods (margin, weight…) is filled in; what is given now is kept for next time.
+    used = goods_profiles.apply(order)
+    goods_profiles.remember(order)
     report = render(template, order, str(record.id), dated=dated, monthly_record=record.id, regenerate=regenerate)
     report.missing = missing_data(order, template, report, dated)
+    report.used = used
     return report
