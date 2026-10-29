@@ -236,6 +236,8 @@ def list_emails(db: Session = Depends(get_db)):
             "classification": e.classification,
             "bank_name": e.bank_name,
             "classification_reason": e.classification_reason,
+            "seen": e.seen_at is not None,
+            "saved": any(r.status == InvoiceStatus.CONFIRMED for r in e.invoices),
             "invoices": [
                 {"id": r.id, "pdf_filename": r.pdf_filename, "bank_code": r.bank_code, "status": r.status.value,
                  "needs_format": stock_report.needs_format(r)}
@@ -246,6 +248,22 @@ def list_emails(db: Session = Depends(get_db)):
     ]
 
 
+class SeenRequest(BaseModel):
+    ids: list[int] = []  # emails; empty with all=True means every email
+    all: bool = False
+
+
+@router.post("/emails/seen")
+def mark_emails_seen(body: SeenRequest, db: Session = Depends(get_db)):
+    """Marks emails as seen (their data looked at) without opening them."""
+    query = db.query(ProcessedEmail).filter(ProcessedEmail.seen_at.is_(None))
+    if not body.all:
+        query = query.filter(ProcessedEmail.id.in_(body.ids or [0]))
+    changed = query.update({ProcessedEmail.seen_at: datetime.utcnow()}, synchronize_session=False)
+    db.commit()
+    return {"marked": changed}
+
+
 @router.get("/invoices")
 def list_invoices(db: Session = Depends(get_db)):
     return [_invoice_json(r) for r in db.query(InvoiceRecord).order_by(InvoiceRecord.created_at.desc())]
@@ -254,6 +272,9 @@ def list_invoices(db: Session = Depends(get_db)):
 @router.get("/invoices/{invoice_id}")
 def get_invoice(invoice_id: int, db: Session = Depends(get_db)):
     record = _get_invoice(db, invoice_id)
+    if record.email is not None and record.email.seen_at is None:  # opening its data is seeing it
+        record.email.seen_at = datetime.utcnow()
+        db.commit()
     messages = (
         db.query(WhatsAppMessage)
         .filter(WhatsAppMessage.invoice_id == invoice_id)

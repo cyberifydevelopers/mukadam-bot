@@ -40,3 +40,6 @@ def _add_missing_columns() -> None:
                 if column.name not in existing:
                     col_type = column.type.compile(dialect=engine.dialect)
                     conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {col_type}'))
+                    if (table.name, column.name) == ("processed_emails", "seen_at"):
+                        # Emails from before this column existed are history, not news.
+                        conn.execute(text("UPDATE processed_emails SET seen_at = processed_at"))

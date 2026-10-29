@@ -239,6 +239,8 @@
   .mail-card.click { cursor: pointer; }
   .mail-card:hover { background: var(--neutral-bg); }
   .mail-card.selected { background: var(--info-bg); }
+  .mail-card.is-new { box-shadow: inset 3px 0 0 var(--accent); }
+  .mail-card.is-new .mail-subject { color: var(--accent); }
   .mail-card .sel-col { padding-top: 10px; }
   .mail-avatar { flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: 14px; background: var(--info-bg); color: var(--accent); }
   .mail-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -302,6 +304,30 @@
   .inv-combined th { position: sticky; top: 0; background: var(--neutral-bg); z-index: 1; }
   .inv-combined tr.day-first td { border-top: 2px solid var(--border); }
   .inv-combined tbody tr:first-child td { border-top: 0; }
+  .brand-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  button.bell { position: relative; background: transparent; border: 1px solid #1f2937; color: var(--sidebar-fg); padding: 7px; border-radius: 10px; line-height: 0; }
+  button.bell:hover, button.bell.has { color: #fff; border-color: #374151; }
+  button.bell svg { width: 18px; height: 18px; }
+  .bell-count { position: absolute; top: -6px; right: -6px; min-width: 18px; padding: 1px 5px; border-radius: 999px; background: #ef4444; color: #fff; font-size: 11px; font-weight: 700; line-height: 16px; text-align: center; }
+  .notif { position: fixed; left: 244px; top: 14px; width: 380px; max-width: calc(100vw - 24px); max-height: 78vh; display: flex; flex-direction: column; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 18px 44px rgba(0,0,0,.28); z-index: 900; overflow: hidden; }
+  .notif[hidden] { display: none; }
+  .notif-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .notif-head button { font-size: 12px; padding: 4px 10px; }
+  .notif-list { overflow: auto; }
+  .notif-list .empty-state { padding: 32px 16px; }
+  .notif-item { display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; border-top: 1px solid var(--border); color: var(--fg); }
+  .notif-item:first-child { border-top: 0; }
+  .notif-item:hover { background: var(--neutral-bg); text-decoration: none; }
+  .notif-item.alert { background: var(--bad-bg); }
+  .n-ico { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 14px; }
+  .n-ico.info { background: var(--info-bg); color: var(--info); } .n-ico.ok { background: var(--ok-bg); color: var(--ok); }
+  .n-ico.warn { background: var(--warn-bg); color: var(--warn); } .n-ico.bad { background: var(--bad-bg); color: var(--bad); }
+  .n-ico.neutral { background: var(--neutral-bg); color: var(--muted); }
+  .n-body { flex: 1; min-width: 0; } .n-title { font-weight: 600; font-size: 13px; }
+  .n-text { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .n-time { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .n-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-top: 6px; flex-shrink: 0; }
+  @media (max-width: 800px) { .notif { left: 12px; right: 12px; top: 64px; width: auto; } }
   .wa-banner { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-radius: 12px; margin-bottom: 16px; border: 1px solid transparent; }
   .wa-banner.ok { background: var(--ok-bg); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 25%, transparent); }
   .wa-banner.bad { background: var(--bad-bg); color: var(--bad); border-color: color-mix(in srgb, var(--bad) 25%, transparent); }
@@ -400,7 +426,8 @@
 <body>
 <div class="layout">
   <aside>
-    <div class="brand">Muccaddam Bot<small>Bank invoice pipeline</small></div>
+    <div class="brand"><div class="brand-row"><div>Muccaddam Bot<small>Bank invoice pipeline</small></div>
+      <button type="button" class="bell" id="bell" title="Notifications" aria-label="Notifications"><span id="bell-ico"></span><span class="bell-count" id="bell-count" hidden></span></button></div></div>
     <nav id="nav">
       <a href="#overview" data-tab="overview">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
@@ -439,6 +466,7 @@
 </div>
 <div id="selbar" hidden></div>
 <div class="toast" id="toast"></div>
+<div class="notif" id="notif" hidden></div>
 
 <script>
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -522,6 +550,7 @@ const ICON = {
   trash: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="m19 6-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>`,
   file: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg>`,
   refresh: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-15-6.7L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 15 6.7l3-2.7"/><path d="M16 16h5v5"/></svg>`,
+  eye: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>`,
   mail: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>`,
 };
 const clearButton = (scope, label) => `<button class="danger" data-action="clear" data-scope="${scope}">${ICON.trash} ${esc(label)}</button>`;
@@ -757,7 +786,7 @@ const views = {
         ${pill(s.gmail.initialized ? "ok" : "warn", `Gmail <span class="muted">${s.gmail.initialized ? esc(ago(s.gmail.last_sync_at)) : "not started"}</span>`)}
         ${pill(waOk ? "ok" : "bad", `WhatsApp <span class="muted">${wa ? `${esc(wa.status)}${wa.phone ? " · +" + esc(wa.phone) : ""}` : esc(s.whatsapp.provider)}</span>`)}
         ${pill(listening ? "ok" : "warn", listening ? "Instant mail detection" : `Checking every ${Math.round(s.gmail.reconcile_interval_seconds / 60)} min`)}
-        ${pill("", `Prompts go to <b>${esc(s.whatsapp.notify_numbers.join(", ") || "not set")}</b>`)}
+        ${pill("", `Approvals go to <b>${esc(s.whatsapp.notify_numbers.join(", ") || "not set")}</b>`)}
         ${s.sheets.url ? `<a class="status-pill" href="${esc(s.sheets.url)}" target="_blank" rel="noopener">Open Google Sheet ↗</a>` : ""}
       </div>
       <div class="stats">
@@ -776,12 +805,13 @@ const views = {
   async emails(filter) {
     const all = await api("/emails");
     const tests = {
+      new: (e) => !e.seen && !e.saved,
       bank: (e) => e.classification === "bank",
       other: (e) => e.classification === "not_bank",
       failed: (e) => e.invoices.some((i) => ["FAILED_PARSE", "SEND_FAILED"].includes(i.status)),
     };
     const emails = tests[filter] ? all.filter(tests[filter]) : all;
-    const chips = [["", "All", all.length], ["bank", "Bank documents", all.filter(tests.bank).length], ["other", "Not bank", all.filter(tests.other).length], ["failed", "Failed", all.filter(tests.failed).length]];
+    const chips = [["", "All", all.length], ["new", "New", all.filter(tests.new).length], ["bank", "Bank documents", all.filter(tests.bank).length], ["other", "Not bank", all.filter(tests.other).length], ["failed", "Failed", all.filter(tests.failed).length]];
     const initials = (name) => (name || "?").replace(/[^\p{L}\p{N} ]/gu, "").trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
     const cards = emails.map((e) => {
       const s = senderName(e.sender);
@@ -792,22 +822,23 @@ const views = {
           ${statusBadge(i.status)}${needsFormatBadge(i.needs_format)}
           <button class="icon mail-reparse" ${busy ? "disabled" : `data-action="reparse" data-id="${i.id}" data-status="${esc(i.status)}"`} title="${busy ? "Parsing…" : `Read file #${i.id} again`}">${busy ? `<span class="spin"></span>` : ICON.refresh}</button></div>`;
       }).join("");
-      return `<div class="mail-card${e.invoices[0] ? " click" : ""}" data-href="${e.invoices[0] ? "#invoice/" + e.invoices[0].id : ""}">
+      const isNew = tests.new(e);
+      return `<div class="mail-card${e.invoices[0] ? " click" : ""}${isNew ? " is-new" : ""}" data-href="${e.invoices[0] ? "#invoice/" + e.invoices[0].id : ""}">
         <div class="sel-col">${selBox("emails", e.id)}</div>
         <div class="mail-avatar">${esc(initials(s.name))}</div>
         <div class="mail-main">
-          <div class="mail-top"><div class="mail-from"><b>${esc(s.name)}</b>${s.addr ? ` <span class="muted mono">${esc(s.addr)}</span>` : ""}</div>
+          <div class="mail-top"><div class="mail-from">${isNew ? `<span class="badge info" title="Its data hasn't been seen or saved yet">New</span> ` : ""}<b>${esc(s.name)}</b>${s.addr ? ` <span class="muted mono">${esc(s.addr)}</span>` : ""}</div>
             <div class="muted mail-time" title="${esc(fmtTime(e.received_at))}">${esc(ago(e.received_at))} · ${esc(fmtTime(e.received_at))}</div></div>
           <div class="mail-subject">${esc(e.subject || "(no subject)")}</div>
           ${e.classification || e.classification_reason ? `<div class="mail-verdict">${e.classification ? verdictBadge(e.classification) : ""}${e.bank_name ? `<b>${esc(e.bank_name)}</b>` : ""}${e.classification_reason ? `<span class="mail-reason muted" title="${esc(e.classification_reason)}">${esc(e.classification_reason)}</span>` : ""}</div>` : ""}
           ${files ? `<div class="mail-files">${files}</div>` : ""}
         </div>
-        <div class="mail-actions"><span class="muted mail-ids">${e.invoices.map((i) => "#" + i.id).join(" ")}</span>
+        <div class="mail-actions">${isNew ? `<button class="icon" data-action="email-seen" data-id="${e.id}" title="Mark as seen">${ICON.eye}</button>` : ""}<span class="muted mail-ids">${e.invoices.map((i) => "#" + i.id).join(" ")}</span>
           <button class="icon danger" data-action="delete-email" data-id="${e.id}" data-name="${esc(e.subject || "(no subject)")}" title="Delete this email and its extracted data">${ICON.trash}</button></div>
       </div>`;
     }).join("");
     return pageHeader("Emails", "Every inbox email with a PDF / Excel attachment. The AI decides whether it's bank-related; only those go on to WhatsApp.",
-      syncButton + (all.length ? clearButton("emails", "Delete all emails") : "")) + `
+      syncButton + (all.filter(tests.new).length ? `<button data-action="emails-seen-all">${ICON.eye} Mark all seen</button>` : "") + (all.length ? clearButton("emails", "Delete all emails") : "")) + `
       <div class="chips">${chips.map(([v, l, n]) => `<a class="chip ${(filter || "") === v ? "active" : ""}" href="#emails${v ? "/" + v : ""}">${esc(l)} <span>${n}</span></a>`).join("")}</div>
       ${emails.length ? `<div class="panel sel-scope">
         <div class="mail-head"><div class="sel-col">${selAll("emails")}</div><span class="muted">Select all · ${emails.length} email${emails.length === 1 ? "" : "s"}</span></div>
@@ -935,15 +966,15 @@ const views = {
       <div class="wa-banner ${wa && !ready ? "bad" : "ok"}">
         <span class="wa-ico">${wa && !ready ? "!" : "✓"}</span>
         <div class="wa-text"><b>${wa && !ready ? "WhatsApp is not connected" : "WhatsApp is connected"}</b>
-          <div>${wa && !ready ? openwaProblem(wa, s.whatsapp.openwa_url) : wa ? `Sending as ${wa.phone ? "+" + esc(wa.phone) : "the bot number"}${wa.pushName ? ` (${esc(wa.pushName)})` : ""}. Prompts will be delivered.` : "Using the Meta Cloud API."}</div></div>
+          <div>${wa && !ready ? openwaProblem(wa, s.whatsapp.openwa_url) : wa ? `Sending as ${wa.phone ? "+" + esc(wa.phone) : "the bot number"}${wa.pushName ? ` (${esc(wa.pushName)})` : ""}. Approval messages will be delivered.` : "Using the Meta Cloud API."}</div></div>
         ${wa && !ready && s.whatsapp.openwa_url ? `<a class="btn" href="${esc(s.whatsapp.openwa_url)}" target="_blank" rel="noopener">Open OpenWA ↗</a>` : ""}
       </div>
       <div class="wa-grid">
-        <div class="panel"><h2>Send prompts to</h2>
+        <div class="panel"><h2>Send approvals to</h2>
           <form id="notify-form" class="panel-body" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
             <input class="field" name="numbers" value="${esc(s.whatsapp.notify_numbers.join(", "))}" placeholder="923001234567" required style="flex:1;min-width:180px">
             <button class="primary" type="submit">Save</button>
-            <div class="muted" style="font-size:12px;flex-basis:100%">Full number with country code (e.g. 923001234567). New prompts go to this number, and Yes/No replies are accepted from it. Prompts already sent stay with the number they went to. Set in ${esc(s.whatsapp.notify_numbers_source)}.</div>
+            <div class="muted" style="font-size:12px;flex-basis:100%">Full number with country code (e.g. 923001234567). New approval requests go to this number, and Yes/No replies are accepted from it. Requests already sent stay with the number they went to. Set in ${esc(s.whatsapp.notify_numbers_source)}.</div>
           </form></div>
         <div class="panel"><h2>Details</h2><div class="panel-body kv" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
           <div><div class="k">Provider</div><div class="v">${esc(s.whatsapp.provider === "openwa" ? "OpenWA (self-hosted)" : "Meta Cloud API")}</div></div>
@@ -956,7 +987,7 @@ const views = {
           <span class="right" style="display:flex;align-items:center;gap:12px">${all.length} message${all.length === 1 ? "" : "s"}${all.length ? `<button class="danger" data-action="msg-clear" data-count="${all.length}">${ICON.trash} Clear log</button>` : ""}</span></h2>
         <div class="chips" style="padding:12px 16px 0;margin:0">${chips.map(([v, l, n]) => `<a class="chip ${(filter || "") === v ? "active" : ""}" href="#whatsapp${v ? "/" + v : ""}">${esc(l)} <span>${n}</span></a>`).join("")}</div>
         ${msgs.length ? `<div class="table-wrap scroll" style="margin-top:12px"><table><thead><tr><th class="sel-col">${selAll("messages")}</th><th>Time</th><th>Direction</th><th>Number</th><th>Message</th><th>For</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
-          : `<div class="empty-state">${all.length ? "No messages match this filter." : "No messages yet. When a PDF is extracted, the confirmation prompt will show up here."}</div>`}
+          : `<div class="empty-state">${all.length ? "No messages match this filter." : "No messages yet. When a PDF is extracted, the approval request will show up here."}</div>`}
       </div>`;
   },
 
@@ -1202,6 +1233,65 @@ function fitActivityRows() {
 }
 window.addEventListener("resize", fitActivityRows);
 
+/* ---------- Notification bell ---------- */
+const bellState = { events: [], alerts: [], toasted: null };
+const BELL_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>`;
+
+// Problems that are true right now (not events): shown at the top until they are fixed.
+function liveAlerts(s) {
+  const alerts = [], wa = s.whatsapp.openwa;
+  if (wa ? wa.status !== "ready" : false) alerts.push({ tone: "bad", title: "WhatsApp is not connected", text: `Status: ${wa.status}. Approval requests can't be sent until it is connected.`, link: "#whatsapp" });
+  if (!s.gmail.initialized) alerts.push({ tone: "warn", title: "Gmail hasn't started", text: "New emails aren't being checked yet.", link: "#settings" });
+  if (!s.llm.configured) alerts.push({ tone: "bad", title: "The AI service isn't set up", text: "No API key: documents can't be read.", link: "#settings" });
+  return alerts;
+}
+
+function renderBell() {
+  const unread = bellState.events.filter((e) => e.unread).length;
+  const total = unread + bellState.alerts.length;
+  const badge = $("#bell-count");
+  badge.hidden = !total;
+  badge.textContent = total > 9 ? "9+" : total;
+  $("#bell").classList.toggle("has", total > 0);
+  const panel = $("#notif");
+  if (panel.hidden) return;
+  const item = (n, extra = "") => `<a class="notif-item ${extra}" href="${esc(n.link || "#overview")}"><span class="n-ico ${n.tone}">${{ bad: "!", warn: "!", ok: "✓", info: "i", neutral: "·" }[n.tone] || "i"}</span>
+    <div class="n-body"><div class="n-title">${esc(n.title)}</div><div class="n-text">${esc(n.text)}</div>${n.at ? `<div class="n-time">${esc(ago(n.at))}</div>` : ""}</div>${n.unread ? `<span class="n-dot"></span>` : ""}</a>`;
+  const list = [...bellState.alerts.map((a) => item(a, "alert")), ...bellState.events.map((e) => item(e))].join("");
+  panel.innerHTML = `<div class="notif-head"><b>Notifications</b>${unread ? `<button type="button" data-notif="read">Mark all read</button>` : ""}</div>
+    <div class="notif-list">${list || `<div class="empty-state">You're all caught up.</div>`}</div>`;
+}
+
+async function refreshBell(s) {
+  try {
+    const d = await api("/notifications");
+    bellState.events = d.events;
+    bellState.alerts = liveAlerts(s);
+    // A toast for what is new since the page was opened (not for what was already waiting).
+    const fresh = d.events.filter((e) => e.unread);
+    if (bellState.toasted === null) bellState.toasted = new Set(fresh.map((e) => e.id));
+    else {
+      const news = fresh.filter((e) => !bellState.toasted.has(e.id));
+      news.forEach((e) => bellState.toasted.add(e.id));
+      if (news.length) toast(news.length > 1 ? `${news.length} new notifications` : `${news[0].title}${news[0].text ? " · " + news[0].text.slice(0, 70) : ""}`, 5000, news.some((e) => e.tone === "bad") ? "warn" : "");
+    }
+    renderBell();
+  } catch { /* the bell is best-effort */ }
+}
+
+document.addEventListener("click", async (ev) => {
+  const panel = $("#notif");
+  if (ev.target.closest("#bell")) { panel.hidden = !panel.hidden; renderBell(); return; }
+  if (ev.target.closest("[data-notif=read]")) {
+    await api("/notifications/read", { method: "POST" });
+    bellState.events.forEach((e) => { e.unread = false; });
+    renderBell();
+    return;
+  }
+  if (!panel.hidden && (ev.target.closest(".notif-item") || !ev.target.closest("#notif"))) panel.hidden = true;
+});
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") $("#notif").hidden = true; });
+
 /* ---------- Stock Reports: a stretch of days as one table ---------- */
 const dayText = (d) => d.toLocaleDateString("en-CA");  // YYYY-MM-DD, local
 function applyRange() {
@@ -1350,6 +1440,7 @@ async function render({ quiet = false } = {}) {
   }
 }
 
+$("#bell-ico").innerHTML = BELL_ICON;
 async function refreshSidebar({ warnWhatsApp = false } = {}) {
   try {
     const [o, s] = await Promise.all([api("/overview"), api("/status")]);
@@ -1361,7 +1452,8 @@ async function refreshSidebar({ warnWhatsApp = false } = {}) {
     const waOk = wa ? wa.status === "ready" : s.whatsapp.provider === "meta";
     $("#dot-wa").className = "dot " + (waOk ? "ok" : "bad");
     $("#foot-wa").textContent = wa ? "· " + wa.status : "· " + s.whatsapp.provider;
-    if (warnWhatsApp && !waOk) toast("WhatsApp is not connected. Please connect WhatsApp, or no prompts can be sent.", 8000, "warn");
+    refreshBell(s);
+    if (warnWhatsApp && !waOk) toast("WhatsApp is not connected. Please connect WhatsApp, or no approval requests can be sent.", 8000, "warn");
   } catch { /* sidebar status is best-effort */ }
 }
 
@@ -1447,11 +1539,11 @@ document.addEventListener("click", async (ev) => {
   if (btn.dataset.action === "clear-selection") { sel.emails.clear(); sel.invoices.clear(); applySelection(); return; }
   if (btn.dataset.action === "reparse" && btn.dataset.status === "CONFIRMED" && !(await askDialog({
     title: "Read this document again?", confirmLabel: "Read again", danger: false,
-    body: `<p>This document is already saved to the Google Sheet.</p><p>It will be read again and a new WhatsApp prompt sent. Answering YES again adds it to the Sheet a second time (and sends the stock report).</p>`,
+    body: `<p>This document is already saved to the Google Sheet.</p><p>It will be read again and a new WhatsApp approval request sent. Answering YES again adds it to the Sheet a second time (and sends the stock report).</p>`,
   }))) return;
   if (btn.dataset.action === "msg-clear" && !(await askDialog({
     title: "Clear the whole message log?", confirmLabel: "Clear log",
-    body: `<p>This removes <b>all ${esc(btn.dataset.count)} WhatsApp messages</b> from the log shown here.</p><p>It cannot be undone.</p><div class="keep">Nothing is deleted from WhatsApp itself, and prompts still waiting for a reply can still be answered.</div>`,
+    body: `<p>This removes <b>all ${esc(btn.dataset.count)} WhatsApp messages</b> from the log shown here.</p><p>It cannot be undone.</p><div class="keep">Nothing is deleted from WhatsApp itself, and requests still waiting for a reply can still be answered.</div>`,
   }))) return;
   if (btn.dataset.action === "msg-delete" && !(await askDialog({
     title: "Delete this message?", confirmLabel: "Delete",
@@ -1522,6 +1614,11 @@ document.addEventListener("click", async (ev) => {
       Object.keys(contentCache).forEach((k) => delete contentCache[k]);
       toast(r.messages && !r.emails && !r.invoices ? `Deleted ${r.messages} message${r.messages === 1 ? "" : "s"}`
         : `Deleted ${r.emails} email${r.emails === 1 ? "" : "s"} and ${r.invoices} file${r.invoices === 1 ? "" : "s"}${r.messages ? ` and ${r.messages} message${r.messages === 1 ? "" : "s"}` : ""}`);
+    } else if (btn.dataset.action === "email-seen") {
+      await api("/emails/seen", { method: "POST", body: { ids: [Number(btn.dataset.id)] } });
+    } else if (btn.dataset.action === "emails-seen-all") {
+      const r = await api("/emails/seen", { method: "POST", body: { all: true } });
+      toast(`${r.marked} email${r.marked === 1 ? "" : "s"} marked as seen`);
     } else if (btn.dataset.action === "msg-delete") {
       await api("/data/delete", { method: "POST", body: { messages: [Number(btn.dataset.id)] } });
       sel.messages.delete(btn.dataset.id);
@@ -1617,7 +1714,7 @@ document.addEventListener("submit", async (ev) => {
   btn.disabled = true;
   try {
     const r = await api("/whatsapp/notify-numbers", { method: "PUT", body: { numbers: form.numbers.value } });
-    toast("Prompts will now go to " + r.notify_numbers.join(", "));
+    toast("Approvals will now go to " + r.notify_numbers.join(", "));
     form.numbers.blur();
     await Promise.all([render({ quiet: true }), refreshSidebar()]);
   } catch (e) {

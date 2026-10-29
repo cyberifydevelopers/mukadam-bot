@@ -98,6 +98,9 @@ class ProcessedEmail(Base):
     subject: Mapped[str] = mapped_column(String(998))
     received_at: Mapped[datetime] = mapped_column(DateTime)
     processed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # When somebody first opened this email's data on the dashboard (or marked it seen). An email that is neither
+    # seen nor saved to the sheet is "new" in the Emails tab.
+    seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
 
     # The LLM's verdict on the email (app/graph/invoice_graph.py):
     # "bank" / "not_bank" / "unsure", which bank, and why.
