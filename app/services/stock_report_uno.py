@@ -154,6 +154,23 @@ def _clear_sample_lines(sheet, clear):
                 cell.setString("")
 
 
+def _update_margin_label(sheet, spec):
+    """"Less Margin @ 5%" under the table: the margin every line has (a different one per line, or none: no figure)."""
+    shown = set()
+    for row in range(spec["first_row"], spec["last_row"] + 1):
+        found = re.search(r"\d+(?:\.\d+)?", sheet.getCellRangeByName("%s%d" % (spec["column"], row)).getString())
+        if found:
+            shown.add(float(found.group()))
+    label = "Less Margin @ %g%%" % next(iter(shown)) if len(shown) == 1 else "Less Margin"
+    label_form = re.compile(r"^\s*less margin\s*@\s*(?:\d+(?:\.\d+)?)?\s*%?\s*$", re.IGNORECASE)
+    for row in range(spec["last_row"] + 1, spec["last_row"] + 40):
+        for column in range(0, 8):
+            cell = sheet.getCellByPosition(column, row - 1)
+            if label_form.match(cell.getString()):
+                cell.setString(label)
+                return
+
+
 def _is_formula(cell):
     return cell.Type == FORMULA
 
@@ -331,6 +348,8 @@ def fill(job):
                 _restyle_paragraph(sheet.getCellRangeByName(rich["cell"]), snapshot, rich["location"], rich["customer"])
             for name in job.get("date_cells", []):
                 _set_date(sheet.getCellRangeByName(name), job["date"])
+            if job.get("margin_label"):
+                _update_margin_label(sheet, job["margin_label"])
             for name, pattern, replacement in job.get("replacements", []):
                 cell = sheet.getCellRangeByName(name)
                 cell.setString(re.sub(pattern, replacement, cell.getString()))

@@ -25,7 +25,8 @@ router = APIRouter(prefix="/api/stock-templates", tags=["stock-templates"])
 
 _MAX_BYTES = 10 * 1024 * 1024
 
-# What the preview is filled with, so a format can be checked before a real invoice goes into it.
+# What the preview is filled with, so a format can be checked before a real invoice goes into it (a made-up
+# margin too: a real report takes none from the format, only from what it is given for the goods).
 _PREVIEW_ORDER = {
     "customer_name": "Preview Customer",
     "pledge_location": "Sample godown, Sample City",
@@ -33,9 +34,9 @@ _PREVIEW_ORDER = {
     "currency": "PKR",
     "rows": [
         {"description": "Sample goods A", "opening_balance": "100", "quantity_received": "50",
-         "quantity_released": "20", "rate_per_unit": "1000"},
+         "quantity_released": "20", "rate_per_unit": "1000", "margin_pct": "10"},
         {"description": "Sample goods B", "opening_balance": "40", "quantity_received": "10",
-         "quantity_released": "5", "rate_per_unit": "2500"},
+         "quantity_released": "5", "rate_per_unit": "2500", "margin_pct": "10"},
     ],
 }
 

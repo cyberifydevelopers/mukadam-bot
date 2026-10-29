@@ -314,6 +314,8 @@ def build_job(template: Template, order: dict, dated: datetime, previous: dict |
             "first_column": min(mapped, key=lambda c: (len(c), c)), "last_column": max(mapped, key=lambda c: (len(c), c)),
         }
 
+    if t.margin:  # the "Less Margin @ x%" under the table follows the margins on the lines
+        job["margin_label"] = {"column": t.margin, "first_row": t.first_row, "last_row": end + added}
     values = job["values"]
     extra = _extra_columns(t)
 
@@ -366,27 +368,26 @@ def build_job(template: Template, order: dict, dated: datetime, previous: dict |
             if number is not None:
                 put(f"{col}{r}", number, f"{col}{t.first_row}")
         pct = _quantity(str(item.get("margin_pct") or ""))
-        if pct is not None and t.margin:
-            # A margin typed in by the approver replaces the sample's own (e.g. "=L16*5%"), so its formulas are rewritten.
-            put(f"{t.margin}{r}", pct)
+        if t.margin and (pct is not None or not known):
+            # The margin is the one given for these goods — by the document, the bank, or what was kept for the customer —
+            # and never the sample's own: a line without one has an empty margin, and is asked for. Less margin and DP value
+            # follow the margin cell, replacing the sample's own formulas ("=L16*5%").
+            put(f"{t.margin}{r}", pct if pct is not None else "")
             force = job.setdefault("force", [])
             if t.less_margin:
                 put(f"{t.less_margin}{r}", f"={t.value}{r}*{t.margin}{r}/100", f"{t.less_margin}{t.first_row}")
                 force.append(f"{t.less_margin}{r}")
             if t.dp:
-                put(f"{t.dp}{r}", f"={t.value}{r}-{t.less_margin}{r}" if t.less_margin else f"={t.value}{r}*{100 - pct}/100", f"{t.dp}{t.first_row}")
+                put(f"{t.dp}{r}", f"={t.value}{r}-{t.less_margin}{r}" if t.less_margin else f"={t.value}{r}*(100-{t.margin}{r})/100", f"{t.dp}{t.first_row}")
                 force.append(f"{t.dp}{r}")
         if known:
             continue
         divisor = f"/{t.value_divisor}" if t.value_divisor != 1 else ""
         put(f"{t.value}{r}", f"={t.balance}{r}*{t.rate}{r}{divisor}", f"{t.value}{t.first_row}")
-        used_pct = t.margin_pct if pct is None else pct
-        if t.margin and used_pct is not None:
-            put(f"{t.margin}{r}", used_pct)
-            put(f"{t.less_margin}{r}", f"={t.value}{r}*{t.margin}{r}/100", f"{t.less_margin}{t.first_row}")
-            put(f"{t.dp}{r}", f"={t.value}{r}-{t.less_margin}{r}", f"{t.dp}{t.first_row}")
-        elif t.dp and used_pct is not None:
-            put(f"{t.dp}{r}", f"={t.value}{r}*{100 - used_pct}/100", f"{t.dp}{t.first_row}")
+        if t.dp and not t.margin:  # a format with no margin column: the sample's own margin
+            used_pct = t.margin_pct if pct is None else pct
+            if used_pct is not None:
+                put(f"{t.dp}{r}", f"={t.value}{r}*{100 - used_pct}/100", f"{t.dp}{t.first_row}")
 
     if previous:
         return job  # the previous report already has its sentence, city and currency labels
