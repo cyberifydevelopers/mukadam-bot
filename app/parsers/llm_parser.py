@@ -192,7 +192,10 @@ _FUNCTION = {
                     "never quantity_released. null for "
                     "anything else, e.g. a collection-of-documents notice. A bank's FOLLOW-UP to an earlier delivery order — the same "
                     "reference, now giving the missing figures (rate, margin %, drums, weight) — is filled in too, with its goods "
-                    "and those figures per line."
+                    "and those figures per line. The same goes for a bank's PLEDGE-SITE / MUCCADAM APPOINTMENT table (columns such as "
+                    "Name of Borrower, Location of Site, Margin, Approved Commodities, Proposed New Muccadam): it gives the MARGIN "
+                    "of each approved commodity for that borrower — customer_name = the borrower, one row per commodity with "
+                    "margin_pct from the Margin column (e.g. 'PADDY 30% RICE 20%' → paddy 30, rice 20), no quantities."
                 ),
                 "properties": {
                     "addressed_to": {
@@ -277,7 +280,7 @@ _FUNCTION = {
                                 },
                                 "margin_pct": {
                                     "type": ["string", "null"],
-                                    "description": "Margin % for this line, digits only (e.g. '5' for '5%'); null when not given",
+                                    "description": "Margin % for this line, digits only (e.g. '5' for '5%', or '30' for the commodity's share of 'PADDY 30% RICE 20%'); null when not given",
                                 },
                                 "drums": {"type": ["string", "null"], "description": "'No of Drums' for this line, digits only; null when not given"},
                                 "weight_per_unit": {"type": ["string", "null"], "description": "'Weight Per Unit' for this line, digits only (e.g. '50' for 50 kg); null when not given"},
@@ -386,7 +389,8 @@ _EMAIL_INSTRUCTION = (
     "only gives missing figures for goods already in stock — rate, margin %, drums, weight, e.g. 'Syed Flour "
     "Mills: rate 3800, margin 5%' — is a follow-up to a delivery order: fill delivery_order for it (customer_name, "
     "one row per goods line with those figures, and the reference_number when the message names one) even when "
-    "no bank can be identified. Extract "
+    "no bank can be identified. A pledge-site / muccadam appointment table (Name of Borrower, Location of Site, "
+    "Margin, Approved Commodities…) is such a follow-up too: its Margin column gives margin_pct per commodity. Extract "
     "the fields from that "
     "original message (receiver = who it was addressed to). Use null for anything not "
     "actually present — do not guess or estimate.\n\n"

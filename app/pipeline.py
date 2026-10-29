@@ -378,32 +378,18 @@ def extract_document(db: Session, record: InvoiceRecord, doc: Document | None = 
     if extracted.extra.get("is_account_statement"):
         return _skip_statement(record)
 
-    # The same reference as a delivery order already confirmed, now with the figures that one lacked: its figures
-    # go into that order and its stock report is made again — no second prompt (see app/services/stock_update.py).
-    order = extracted.extra.get("delivery_order")
-    earlier = stock_update.find_existing(db, record, order) if order else None
-    applied = stock_update.merge(earlier, order) if earlier else []
-    if applied:
-        reason = f"Added to the earlier order #{earlier.id}: its figures were added and its stock report updated"
-        record.raw_extracted_json = json.dumps(
-            {**json.loads(record.raw_extracted_json), "classification_reason": reason, "merged_into": earlier.id, "merged_applied": applied}
-        )
+    # A message that only gives figures (a bank's follow-up with the rate, a margin table, a few lines of text): the figures
+    # go into the earlier order and its stock report is made again, or are kept for the factory's goods — no approval
+    # request of its own (see app/services/stock_update.py).
+    followed = stock_update.follow_ups(db, record, extracted.extra)
+    if followed:
+        parts = [f"added to order #{m['into']} ({'; '.join(m['applied'])})" for m in followed["merges"]]
+        parts += [f"saved for {p['factory']} ({'; '.join(p['notes'])})" for p in followed["profiles"]]
+        reason = "Figures " + " · ".join(parts)
+        record.raw_extracted_json = json.dumps({**json.loads(record.raw_extracted_json), "classification_reason": reason, **followed})
         record.status = InvoiceStatus.MERGED
         logger.info("%s: %s", record.pdf_filename, reason)
         return "merged"
-
-    # Only figures (rate, margin, weight…) for a known factory's goods, no order to add them to: they are kept for its goods.
-    if order and not applied and stock_update.figures_only(order):
-        saved = stock_update.save_from_order(db, order)
-        if saved:
-            factory, notes = saved
-            reason = f"Figures saved for {factory}: " + "; ".join(notes)
-            record.raw_extracted_json = json.dumps(
-                {**json.loads(record.raw_extracted_json), "classification_reason": reason, "profile_saved": notes, "factory": factory}
-            )
-            record.status = InvoiceStatus.MERGED
-            logger.info("%s: %s", record.pdf_filename, reason)
-            return "merged"
 
     if not _is_bank(extracted):
         record.status = InvoiceStatus.NOT_BANK

@@ -71,24 +71,93 @@ def find_existing(db: Session, record: InvoiceRecord, order: dict) -> InvoiceRec
     if not ref and not customer:
         return None
     recent = datetime.utcnow() - timedelta(days=30)
-    earlier = db.query(InvoiceRecord).filter(InvoiceRecord.id != record.id, InvoiceRecord.status == InvoiceStatus.CONFIRMED)
-    for old in earlier.order_by(InvoiceRecord.id.desc()):
-        old_order = stock_report.delivery_order(old)
-        old_ref = _alnum(old.reference_number)
-        if not old_order:
-            continue
-        same_customer = bool(customer) and _same_customer(customer, _alnum(stock_report._customer(old_order)))
-        if ref:
-            if old_ref and (old_ref == ref or (same_customer and _within_one(old_ref, ref))):
+    earlier = [
+        (old, old_order) for old in db.query(InvoiceRecord)
+        .filter(InvoiceRecord.id != record.id, InvoiceRecord.status == InvoiceStatus.CONFIRMED).order_by(InvoiceRecord.id.desc())
+        if (old_order := stock_report.delivery_order(old))
+    ]
+
+    def same_customer(old_order: dict) -> bool:
+        return bool(customer) and _same_customer(customer, _alnum(stock_report._customer(old_order)))
+
+    if ref:
+        for old, old_order in earlier:
+            old_ref = _alnum(old.reference_number)
+            if old_ref and (old_ref == ref or (same_customer(old_order) and _within_one(old_ref, ref))):
                 return old
-        elif same_customer and (old.created_at or recent) >= recent:
-            # No reference to go by: it must be the same goods (rice figures don't go to a wheat order).
-            new_goods = {g for row in order.get("rows") or [] if (g := goods_profiles.goods_key(row.get("description")))}
-            old_goods = {g for row in old_order.get("rows") or [] if (g := goods_profiles.goods_key(row.get("description")))}
-            if new_goods and not new_goods & old_goods:
-                continue
-            return old
+        # A message that only gives figures may carry a number that is not a delivery order's reference (a CP /
+        # account number in a margin table): then it is matched by customer and goods like one with no reference.
+        if not figures_only(order):
+            return None
+    new_goods = {g for row in order.get("rows") or [] if (g := goods_profiles.goods_key(row.get("description")))}
+    for old, old_order in earlier:
+        if not same_customer(old_order) or (old.created_at or recent) < recent:
+            continue
+        old_goods = {g for row in old_order.get("rows") or [] if (g := goods_profiles.goods_key(row.get("description")))}
+        if new_goods and not new_goods & old_goods:
+            continue  # rice figures don't go to a wheat order
+        return old
     return None
+
+
+def orders_from_table(items_table: dict | None) -> list[dict]:
+    """A bank's pledge-site / muccadam appointment table (Name of Borrower, Margin, Approved Commodities…), read
+    straight from the table the model returned: one figures-only order per borrower, a margin per commodity. [] when the
+    table isn't one. Not left to the model, so a table that was not recognised as a delivery order is still used."""
+    columns = [str(c).lower() for c in (items_table or {}).get("columns") or []]
+
+    def column(*words: str) -> int | None:
+        return next((i for i, c in enumerate(columns) if any(w in c for w in words)), None)
+
+    borrower, margin, commodities, location = column("borrower"), column("margin"), column("commodit"), column("location")
+    if borrower is None or margin is None:
+        return []
+    orders = []
+    for row in (items_table or {}).get("rows") or []:
+        def cell(i: int | None) -> str:
+            return str(row[i]).strip() if i is not None and i < len(row) and row[i] is not None else ""
+
+        name = cell(borrower)
+        pairs = re.findall(r"([A-Za-z][A-Za-z &/.\-]*?)\s*(\d+(?:\.\d+)?)\s*%", cell(margin))
+        bare = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*%?\s*", cell(margin))
+        if (bare or len(pairs) == 1) and cell(commodities):  # one margin for all the approved commodities ("20%")
+            goods = [g.strip() for g in re.split(r"[,;/]", cell(commodities)) if g.strip()]
+            pct = bare.group(1) if bare else pairs[0][1]
+            pairs = [(g, pct) for g in goods] or pairs
+        rows = [{"description": g.strip(" -&/."), "margin_pct": pct} for g, pct in pairs if g.strip(" -&/.")]
+        if name and rows:
+            orders.append({"customer_name": name, "pledge_location": cell(location) or None, "rows": rows})
+    return orders
+
+
+def follow_ups(db: Session, record: InvoiceRecord, extra: dict) -> dict | None:
+    """What a message that only gives figures (rate, margin…) did: added to an earlier order, or kept for the
+    factory's goods. {"merges": [{"into", "applied"}], "profiles": [{"factory", "notes"}]}, or None when it isn't one."""
+    orders = [extra["delivery_order"]] if extra.get("delivery_order") else orders_from_table(extra.get("items_table"))
+    merges, profiles = [], []
+    for order in orders:
+        earlier = find_existing(db, record, order)
+        applied = merge(earlier, order) if earlier else []
+        if applied:
+            merges.append({"into": earlier.id, "applied": applied})
+        elif figures_only(order) and (saved := save_from_order(db, order)):
+            profiles.append({"factory": saved[0], "notes": saved[1]})
+    return {"merges": merges, "profiles": profiles} if merges or profiles else None
+
+
+def announce_all(db: Session, record: InvoiceRecord, extra: dict) -> None:
+    """Sends the approver what follow_ups() did: each updated stock report, and what was kept for which factory."""
+    for item in extra.get("merges") or []:
+        old = db.get(InvoiceRecord, item["into"])
+        try:
+            announce(db, old, record, item["applied"])
+        except Exception:  # noqa: BLE001 — the merge is saved; a failed send must not fail the email
+            logger.exception("Couldn't send the updated report of #%s", item["into"])
+    for item in extra.get("profiles") or []:
+        try:
+            announce_profile(db, record, item["factory"], item["notes"])
+        except Exception:  # noqa: BLE001
+            logger.exception("Couldn't tell the approver what was saved from #%s", record.id)
 
 
 def _pair(old_rows: list[dict], new_rows: list[dict]) -> list[tuple[dict, dict]]:

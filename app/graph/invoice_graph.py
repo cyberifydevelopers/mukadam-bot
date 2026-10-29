@@ -100,7 +100,6 @@ def analyze_documents(state: InvoiceState, config: RunnableConfig) -> InvoiceSta
     reasons: list[str] = []
     outcomes: list[str] = []
     merged: list[tuple[InvoiceRecord, dict]] = []
-    saved_figures: list[tuple[InvoiceRecord, dict]] = []
     documents = list(state["documents"])
 
     def analyze(doc: Document, labelled: bool) -> None:
@@ -117,7 +116,7 @@ def analyze_documents(state: InvoiceState, config: RunnableConfig) -> InvoiceSta
         if outcome == "invoice":
             selected.append(record)
         elif outcome == "merged":
-            (merged if extra.get("merged_into") else saved_figures).append((record, extra))
+            merged.append((record, extra))
         elif outcome == "not_bank" and extra.get("not_ours"):
             # Addressed to another company: read only to find that out. The file and its record are not kept, so only
             # our own company's letters show up as extracted data; the email's row keeps the reason.
@@ -139,25 +138,13 @@ def analyze_documents(state: InvoiceState, config: RunnableConfig) -> InvoiceSta
     failed = not selected and all(o == "failed" for o in outcomes)
     # A follow-up with figures for an earlier order: that order's updated stock report goes to the approver.
     for record, extra in merged:
-        old = db.get(InvoiceRecord, extra["merged_into"])
-        try:
-            stock_update.announce(db, old, record, extra["merged_applied"])
-        except Exception:  # noqa: BLE001 — the merge is saved; a failed send must not fail the email
-            logger.exception("Couldn't send the updated report of #%s", extra["merged_into"])
-    for record, extra in saved_figures:
-        try:
-            stock_update.announce_profile(db, record, extra["factory"], extra["profile_saved"])
-        except Exception:  # noqa: BLE001
-            logger.exception("Couldn't tell the approver what was saved from #%s", record.id)
+        stock_update.announce_all(db, record, extra)
     if selected:
         row.classification = "bank"
         set_stage(db, row, "sending", f"Selected — sending {len(selected)} WhatsApp message(s)")
     elif merged:
         row.classification = "bank"
-        set_stage(db, row, "done", f"Added to #{merged[0][1]['merged_into']} — its stock report was updated")
-    elif saved_figures:
-        row.classification = "bank"
-        set_stage(db, row, "done", f"Figures saved for {saved_figures[0][1]['factory']}")
+        set_stage(db, row, "done", merged[0][1]["classification_reason"][:300])
     elif failed:
         row.classification = None
         set_stage(db, row, "failed", row.classification_reason)
