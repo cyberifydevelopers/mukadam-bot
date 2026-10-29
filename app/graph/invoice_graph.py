@@ -85,8 +85,12 @@ def read_documents(state: InvoiceState, config: RunnableConfig) -> InvoiceState:
 
 def _discard(db: Session, record: InvoiceRecord) -> None:
     path = os.path.join(settings.pdf_storage_dir, record.pdf_filename)
+    email = record.email
+    db.flush()  # a record made in this run isn't in the database yet, and only a stored one can be deleted
     db.delete(record)
     db.flush()
+    if email is not None:
+        db.expire(email, ["invoices"])  # no longer lists it
     try:
         os.remove(path)
     except OSError:

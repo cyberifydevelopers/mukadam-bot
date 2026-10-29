@@ -100,33 +100,44 @@ def find_existing(db: Session, record: InvoiceRecord, order: dict) -> InvoiceRec
     return None
 
 
+def _by_goods(text: str, commodities: list[str]) -> dict[str, tuple[str, str]]:
+    """"PUTTI 3,800 COTTON BALES 85,000" or "PUTTI 25% COTTON BALES 20%" → {"putti": ("PUTTI", "3800"), …}. A single
+    bare figure ("20%", "3,800") is for every commodity the table approves."""
+    bare = re.fullmatch(r"\s*(?:rs\.?|pkr)?\s*(\d[\d,]*(?:\.\d+)?)\s*(?:%|kgs?)?\s*", text, re.IGNORECASE)
+    if bare:
+        return {g.lower(): (g, bare.group(1).replace(",", "")) for g in commodities}
+    found = re.findall(r"([A-Za-z][A-Za-z &/.\-]*?)\s*(?:rs\.?|pkr)?\s*(\d[\d,]*(?:\.\d+)?)\s*(?:%|kgs?\b)?", text, re.IGNORECASE)
+    if len(found) == 1 and commodities:  # one figure, named or not: the table's single figure for all of them
+        return {g.lower(): (g, found[0][1].replace(",", "")) for g in commodities}
+    return {g.strip(" -&/.").lower(): (g.strip(" -&/."), n.replace(",", "")) for g, n in found if g.strip(" -&/.")}
+
+
 def orders_from_table(items_table: dict | None) -> list[dict]:
-    """A bank's pledge-site / muccadam appointment table (Name of Borrower, Margin, Approved Commodities…), read
-    straight from the table the model returned: one figures-only order per borrower, a margin per commodity. [] when the
-    table isn't one. Not left to the model, so a table that was not recognised as a delivery order is still used."""
+    """A bank's pledge-site / muccadam appointment table (Name of Borrower, Margin, Rate Per Unit, Weight Per Unit,
+    Approved Commodities…), read straight from the table the model returned: one figures-only order per borrower, with
+    each commodity's margin, rate and weight. [] when the table isn't one. Not left to the model, so a table that
+    was not recognised as a delivery order is still used."""
     columns = [str(c).lower() for c in (items_table or {}).get("columns") or []]
 
-    def column(*words: str) -> int | None:
-        return next((i for i, c in enumerate(columns) if any(w in c for w in words)), None)
+    def column(*words: str, but: tuple = ()) -> int | None:
+        return next((i for i, c in enumerate(columns) if any(w in c for w in words) and not any(x in c for x in but)), None)
 
-    borrower, margin, commodities, location = column("borrower"), column("margin"), column("commodit"), column("location")
-    if borrower is None or margin is None:
+    borrower, commodities, location = column("borrower"), column("commodit"), column("location")
+    figures = {"margin_pct": column("margin"), "rate_per_unit": column("rate", "price"), "weight_per_unit": column("weight", but=("measure",))}
+    if borrower is None or not any(v is not None for v in figures.values()):
         return []
     orders = []
     for row in (items_table or {}).get("rows") or []:
         def cell(i: int | None) -> str:
             return str(row[i]).strip() if i is not None and i < len(row) and row[i] is not None else ""
 
-        name = cell(borrower)
-        pairs = re.findall(r"([A-Za-z][A-Za-z &/.\-]*?)\s*(\d+(?:\.\d+)?)\s*%", cell(margin))
-        bare = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*%?\s*", cell(margin))
-        if (bare or len(pairs) == 1) and cell(commodities):  # one margin for all the approved commodities ("20%")
-            goods = [g.strip() for g in re.split(r"[,;/]", cell(commodities)) if g.strip()]
-            pct = bare.group(1) if bare else pairs[0][1]
-            pairs = [(g, pct) for g in goods] or pairs
-        rows = [{"description": g.strip(" -&/."), "margin_pct": pct} for g, pct in pairs if g.strip(" -&/.")]
-        if name and rows:
-            orders.append({"customer_name": name, "pledge_location": cell(location) or None, "rows": rows})
+        goods = [g.strip() for g in re.split(r"[,;/]", cell(commodities)) if g.strip()]
+        rows: dict[str, dict] = {}
+        for key, index in figures.items():
+            for lower, (name, value) in _by_goods(cell(index), goods).items():
+                rows.setdefault(lower, {"description": name})[key] = value
+        if cell(borrower) and rows:
+            orders.append({"customer_name": cell(borrower), "pledge_location": cell(location) or None, "rows": list(rows.values())})
     return orders
 
 

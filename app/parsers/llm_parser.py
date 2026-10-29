@@ -195,7 +195,8 @@ _FUNCTION = {
                     "and those figures per line. The same goes for a bank's PLEDGE-SITE / MUCCADAM APPOINTMENT table (columns such as "
                     "Name of Borrower, Location of Site, Margin, Approved Commodities, Proposed New Muccadam): it gives the MARGIN "
                     "of each approved commodity for that borrower — customer_name = the borrower, one row per commodity with "
-                    "margin_pct from the Margin column (e.g. 'PADDY 30% RICE 20%' → paddy 30, rice 20), no quantities."
+                    "margin_pct from the Margin column (e.g. 'PADDY 30% RICE 20%' → paddy 30, rice 20), and rate_per_unit / weight_per_unit "
+                    "from its Rate Per Unit / Weight Per Unit columns when it has them, no quantities."
                 ),
                 "properties": {
                     "addressed_to": {
