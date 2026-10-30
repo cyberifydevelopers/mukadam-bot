@@ -181,6 +181,8 @@ def _now() -> str:
 
 def _entry_from_json(raw: dict) -> Entry:
     layout = template_from_dict(raw["layout"])
+    if raw.get("source", "uploaded") != "builtin":
+        layout = replace(layout, margin_pct=None)  # a sample only shows the layout: its own margin is never used
     return Entry(
         id=raw["id"], name=raw.get("name") or raw["id"], source=raw.get("source", "uploaded"),
         original_name=raw.get("original_name") or layout.file, added_at=raw.get("added_at", ""),

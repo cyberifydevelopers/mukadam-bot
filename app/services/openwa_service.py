@@ -200,14 +200,17 @@ class Reaction:
 
 _REPLY_RE = re.compile(r"^\s*(yes|y|no|n)\b\W*(t?\d+)?\s*$", re.IGNORECASE)
 
-# "Share pdf for 496", "send pdf #496", "pdf 496", "get file T12" — and a bare
-# "pdf" / "share pdf" sent as a reply (swipe → Reply) to one of the bot's prompts.
-# "original pdf 496" asks for the document as it arrived instead of the stock report.
-_PDF_RE = re.compile(
-    r"^\s*(?:(?:please\s+)?(?:share|send|get|give|forward|need)\s+(?:me\s+)?(?:the\s+)?)?"
-    r"(original\s+|source\s+)?(?:pdf|file|document|invoice|report)\s*(?:for|of)?\s*#?\s*(t?\d+)?\s*[.!]?\s*$",
+# A request for a report's files — worded freely: "share pdf for 496", "shared pdf for 4", "send me report #496",
+# "can you send the excel of 12?", "pdf 496", "get file T12" — and a bare "pdf" / "report" sent as a reply (swipe → Reply)
+# to one of the bot's messages. Any of pdf / report / excel / file… means the stock report: its PDF and its Excel, both.
+# "original pdf 496" asks for the document as it arrived instead.
+_FILE_WORD_RE = re.compile(r"\b(?:pdfs?|reports?|excel|xlsx?|sheets?|files?|documents?|invoices?)\b", re.IGNORECASE)
+_SEND_WORD_RE = re.compile(
+    r"\b(?:shar(?:e|ed|ing)|send(?:ing)?|sent|get|give|forward(?:ed)?|need|want|show|dedo|bhejo|bhej|bhijwao|chahiye|chahye|chaiye)\b",
     re.IGNORECASE,
 )
+_ORIGINAL_WORD_RE = re.compile(r"\b(?:original|source)\b", re.IGNORECASE)
+_LABEL_NUMBER_RE = re.compile(r"(?<![\w.,])#?\s*(t\d+|\d+)(?![\w.,%])", re.IGNORECASE)
 
 # Figures for a stock report, typed as a reply to it: "rate 3800", "rate wheat 3800", "drums 120",
 # "Weight Per Unit 220", "margin 5%" — one per line (or separated by ; or ,).
@@ -334,19 +337,21 @@ def parse_reply(webhook_payload: dict) -> TextReply | None:
 
 
 def parse_pdf_request(webhook_payload: dict) -> PdfRequest | None:
-    """A message asking for a document's original PDF ("Share pdf for 496").
-    None for anything else, and for a request that names nothing — no number
-    and not sent as a reply to one of the bot's messages."""
+    """A message asking for a report's files ("Share pdf for 496", "send report 496"): the stock report's PDF and
+    Excel, or with "original" the document as it arrived. None for anything else, and for a request that names
+    nothing — no number and not sent as a reply to one of the bot's messages."""
     if webhook_payload.get("event") != "message.received":
         return None
     data = webhook_payload.get("data") or {}
     if data.get("fromMe") or data.get("isGroup") or data.get("isStatusBroadcast"):
         return None
-    body = data.get("body") or ""
-    match = _PDF_RE.match(body)
-    if not match:
-        return None
-    original, label = match.groups()
+    body = (data.get("body") or "").strip()
+    if len(re.findall(r"\w+", body)) > 9 or not _FILE_WORD_RE.search(body) or re.search(_FIGURE_FIELD, body, re.IGNORECASE):
+        return None  # not about files, or a figure ("report 16 margin 5") or a long message
+    if looks_like_question(body) and not _SEND_WORD_RE.search(body):
+        return None  # "what is margin in this report?" is a question, "can you send pdf for 4?" is a request
+    found = _LABEL_NUMBER_RE.search(body)
+    label = found.group(1) if found else None
     quoted = (data.get("quotedMessage") or {}).get("id")
     if not label and not quoted:
         return None
@@ -356,7 +361,7 @@ def parse_pdf_request(webhook_payload: dict) -> PdfRequest | None:
         quoted_message_id=quoted,
         message_id=data.get("id", ""),
         text=body,
-        original=bool(original),
+        original=bool(_ORIGINAL_WORD_RE.search(body)),
     )
 
 

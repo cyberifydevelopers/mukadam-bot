@@ -148,8 +148,8 @@ def pick_template(record: InvoiceRecord, order: dict) -> Template:
     if template is None:
         raise NoFormatError(
             f"There is no report format for {_customer(order)}" + (f" or {bank}" if bank else "") + " yet. Add a "
-            f"{bank + ' ' if bank else ''}Excel sample (an earlier filled-in report) in the dashboard's Report formats "
-            f"tab, then send \"share pdf for {record.id}\"."
+            f"{bank + ' ' if bank else ''}Excel sample (any filled-in report; only its layout is used) in the dashboard's "
+            f"Report formats tab, then send \"share pdf for {record.id}\"."
         )
     if not is_own_format(template, order):
         logger.info("Stock report #%s: no format for %s, using %s's (%s)", record.id, _customer(order), bank, template.file)
@@ -384,8 +384,8 @@ def build_job(template: Template, order: dict, dated: datetime, previous: dict |
             continue
         divisor = f"/{t.value_divisor}" if t.value_divisor != 1 else ""
         put(f"{t.value}{r}", f"={t.balance}{r}*{t.rate}{r}{divisor}", f"{t.value}{t.first_row}")
-        if t.dp and not t.margin:  # a format with no margin column: the sample's own margin
-            used_pct = t.margin_pct if pct is None else pct
+        if t.dp and not t.margin:  # a format with no margin column: only a margin given for these goods
+            used_pct = pct if pct is not None else t.margin_pct  # t.margin_pct: only a built-in's own (never an uploaded sample's)
             if used_pct is not None:
                 put(f"{t.dp}{r}", f"={t.value}{r}*{100 - used_pct}/100", f"{t.dp}{t.first_row}")
 
@@ -544,11 +544,8 @@ def render(
             previous = _previous_report(
                 customer, template, _order_key(own[0]) if own else (f"{dated:%Y-%m-%d}", "￿"), monthly_record
             ) if monthly_record is not None else None
-            if (monthly_record is not None and previous is None and template.clear_sample and path.suffix.lower() == ".xlsx"
-                    and is_own_format(template, order)):
-                # An uploaded sample is a report somebody already made: it is the company's previous report —
-                # unless it is another firm's, borrowed for its bank's layout: then it is only wiped and refilled.
-                previous = ({"last_row": template.last_row}, str(path))
+            # An uploaded sample only gives the layout: its goods, rates and margins are never carried into a report
+            # (it is wiped and refilled). Only reports the bot made chain on from each other.
             lines = _previous_lines(template, *previous) if previous else None
 
             job = build_job(template, order, dated, {"last_row": previous[0]["last_row"], "lines": lines} if previous and lines else None)

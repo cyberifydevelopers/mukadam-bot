@@ -1113,7 +1113,7 @@ const views = {
         <label class="fmt-add-name"><span class="muted">Customer name <span style="opacity:.7">(optional, single file only)</span></span>
           <input class="field" name="customer" placeholder="e.g. Al Mustafa Rice Mills"></label>
         <button class="primary" type="submit">Add &amp; let AI read it</button>
-        <div class="muted fmt-add-hint">A filled-in report works as a sample: its old stock lines are replaced by the new invoice's goods; its totals, margins and drawing-power formulas stay as they are. Use <b>Preview PDF</b> afterwards to check every figure.</div>
+        <div class="muted fmt-add-hint">The AI only reads the sample's layout. Its goods, rates and margins are never used: they are cleared and replaced by each invoice's own goods, and margins come only with the documents. Use <b>Preview PDF</b> afterwards to check the layout.</div>
       </form>
       <div class="fmt-list-head">${templates.length} format${templates.length === 1 ? "" : "s"}</div>
       ${templates.length ? `<div class="fmt-list">${cards}</div>` : `<div class="empty-state">No report formats yet. Add an Excel sample above.</div>`}`;

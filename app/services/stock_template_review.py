@@ -82,7 +82,6 @@ _FUNCTION = {
             "margin": {**_COLUMN_FIELD, "description": "A per-line margin % column, if there is one"},
             "less_margin": {**_COLUMN_FIELD, "description": "A per-line 'less margin' amount column, if there is one"},
             "dp": {**_COLUMN_FIELD, "description": "Per-line DP / drawing-power value column, if there is one"},
-            "margin_pct": {"type": ["number", "null"], "description": "The margin this sample uses, as a whole number (30 for 30%); null if none"},
             "value_divisor": {"type": "integer", "enum": [1, 1000, 1000000], "description": "1 normally; 1000000 if values are in millions"},
             "date_cell": {"type": ["string", "null"], "description": "Cell holding 'Dated: dd-mm-yyyy' (or just 'Dated')"},
             "text_cell": {"type": "string", "description": "Cell (top-left of the merged block) with the sentence saying the stock is lying in a godown, on the account of the customer"},
@@ -278,10 +277,7 @@ def _validate(ws, a: dict, original_name: str, customer_hint: str) -> Review:
         if margin or less_margin:
             notes.append("The margin columns are incomplete, so the sample's own margin formulas are left as they are.")
         margin = less_margin = None
-    pct = a.get("margin_pct")
-    pct = float(pct) if isinstance(pct, (int, float)) and 0 <= pct < 100 else None
-    if dp and pct is None:
-        notes.append("No margin % was found, so DP value is only filled where the sample has no formula of its own.")
+    pct = None  # the sample is read for its layout only: its own margin is never taken (margins come with the documents)
     divisor = a.get("value_divisor") if a.get("value_divisor") in (1000, 1000000) else 1
 
     # Edges and merges, read from the sheet.

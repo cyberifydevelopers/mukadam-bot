@@ -110,25 +110,11 @@ def _acknowledge(db: Session, target: Confirmable, answer: str, ack: str) -> Non
     _send_logged(db, target.whatsapp_to_number, ack, target)
 
 
-def _send_stock_report(db: Session, record: InvoiceRecord) -> None:
-    """After a delivery order is confirmed: builds its stock report and sends
-    it back to the approver as PDF + Excel. A failure here is reported in the
-    chat but never undoes the save — the YES already went to the Sheet."""
-    to_number = record.whatsapp_to_number
-    try:
-        report = stock_report.build(record)
-    except stock_report.NoFormatError as exc:
-        logger.warning("Stock report for #%s not made: %s", record.id, exc)
-        _send_logged(db, to_number, f"Saved. No stock report was made for #{record.id}. {exc}", record)
-        return
-    except Exception as exc:  # noqa: BLE001 — any failure is reported to the approver, not raised
-        logger.exception("Stock report for #%s failed", record.id)
-        _send_logged(db, to_number, f"Saved, but the stock report for #{record.id} couldn't be made: {exc}", record)
-        return
-
+def _deliver_report(db: Session, to_number: str, record: InvoiceRecord, report: stock_report.StockReport) -> None:
+    """Sends a stock report as its PDF and its Excel — always both — the caption (what was filled in / what is
+    missing) going with the first."""
     files = [(report.pdf_path, stock_report.PDF_MIME), (report.xlsx_path, stock_report.XLSX_MIME)]
-    files = [(path, mime) for path, mime in files if path]
-    for n, (path, mimetype) in enumerate(files):
+    for n, (path, mimetype) in enumerate(f for f in files if f[0]):
         caption = stock_report.caption(record, report) if n == 0 else None
         message_id = error = None
         try:
@@ -147,6 +133,27 @@ def _send_stock_report(db: Session, record: InvoiceRecord) -> None:
             error=error,
             invoice_id=record.id,
         )
+        if error:
+            _send_logged(db, to_number, f"I couldn't send {os.path.basename(path)} for #{record.id}: {error}", record)
+
+
+def _send_stock_report(db: Session, record: InvoiceRecord) -> None:
+    """After a delivery order is confirmed: builds its stock report and sends
+    it back to the approver as PDF + Excel. A failure here is reported in the
+    chat but never undoes the save — the YES already went to the Sheet."""
+    to_number = record.whatsapp_to_number
+    try:
+        report = stock_report.build(record)
+    except stock_report.NoFormatError as exc:
+        logger.warning("Stock report for #%s not made: %s", record.id, exc)
+        _send_logged(db, to_number, f"Saved. No stock report was made for #{record.id}. {exc}", record)
+        return
+    except Exception as exc:  # noqa: BLE001 — any failure is reported to the approver, not raised
+        logger.exception("Stock report for #%s failed", record.id)
+        _send_logged(db, to_number, f"Saved, but the stock report for #{record.id} couldn't be made: {exc}", record)
+        return
+
+    _deliver_report(db, to_number, record, report)
 
 
 def _record_for_quote(db: Session, quoted_id: str | None) -> InvoiceRecord | None:
@@ -215,9 +222,8 @@ def _handle_figures_request(db: Session, request: openwa_service.FiguresRequest)
 
 
 def _handle_pdf_request(db: Session, request: openwa_service.PdfRequest) -> dict:
-    """"Share pdf for 496": sends the stock report (PDF) made for that item
-    back to the person asking — "original pdf 496" sends the document as it
-    arrived instead. Only the approver numbers (NOTIFY_WHATSAPP_NUMBERS) can
+    """"Share pdf for 496" / "send report 496": sends the stock report made for that item back to the person
+    asking, as its PDF and its Excel — "original pdf 496" sends the document as it arrived instead. Only the approver numbers (NOTIFY_WHATSAPP_NUMBERS) can
     ask — these are bank documents — and anyone else is ignored silently."""
     if not request.sender_phone or request.sender_phone not in {_digits(n) for n in settings.notify_numbers_list}:
         return {"status": "ignored"}
@@ -281,9 +287,9 @@ def _handle_pdf_request(db: Session, request: openwa_service.PdfRequest) -> dict
             _send_logged(db, request.sender_phone, f"The stock report for #{record.id} couldn't be made: {exc}", record)
             db.commit()
             return {"status": "ok"}
-        path = report.pdf_path
-        name = os.path.basename(path)
-        caption = stock_report.caption(record, report)
+        _deliver_report(db, request.sender_phone, record, report)
+        db.commit()
+        return {"status": "ok"}
     message_id = error = None
     try:
         message_id = openwa_service.send_document(
