@@ -275,6 +275,12 @@
   .stat .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
   .stat .value { font-size: 28px; font-weight: 700; line-height: 1.15; }
   .stat .hint { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+  .act-email { max-width: 340px; }
+  .act-subject { font-size: 14px; }
+  .act-sub { font-size: 12px; display: flex; gap: 4px; align-items: baseline; min-width: 0; margin-top: 2px; }
+  .act-from { flex-shrink: 0; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .act-att { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .step.warn { background: var(--warn-bg); color: var(--warn); font-weight: 600; }
   .clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
   .act-fail { font-size: 12px; margin-top: 6px; display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
   .act-fail .clamp2 { flex: 1; min-width: 200px; }
@@ -515,6 +521,12 @@ const STATUS = {
 };
 const VERDICT = { bank: ["Bank", "ok"], not_bank: ["Not bank", ""], unsure: ["Unsure", "warn"] };
 const verdictBadge = (v) => { if (!v) return `<span class="muted">—</span>`; const [l, c] = VERDICT[v] || [v, ""]; return `<span class="badge ${c}">${esc(l)}</span>`; };
+// What the stock report still lacks (margin, rate, weight…): an alert until it is given, like "Sample required".
+const missingBadge = (list) => {
+  if (!list || !list.length) return "";
+  const margin = list.some((m) => /margin/i.test(m));
+  return ` <span class="badge warn" title="${esc("Not in the document: " + list.join(", ") + ". Send them on WhatsApp (e.g. margin wheat 5) or give them in the Factories tab.")}">${margin ? "Margin &amp; figures missing" : `${list.length} figure${list.length === 1 ? "" : "s"} missing`}</span>`;
+};
 const needsFormatBadge = (x) => x ? ` <span class="badge warn" title="This firm has no report format yet, so no stock report is made. Add its Excel sample in Report formats.">Sample required</span>` : "";
 // Files being re-parsed right now (the request takes a while): shown on their button and in a banner that survives page refreshes.
 const parsing = new Set();
@@ -653,7 +665,7 @@ const ACTIVE_STAGES = ["reading", "analyzing", "sending"];
 
 // One step of the progress bar: state is done / active / failed / skip / todo.
 const step = (state, label, title = "") =>
-  `<span class="step ${state}" title="${esc(title)}">${state === "done" ? "✓" : state === "failed" ? "✕" : state === "active" ? `<i class="spin"></i>` : state === "skip" ? "–" : "○"} ${label}</span>`;
+  `<span class="step ${state}" title="${esc(title)}">${state === "done" ? "✓" : state === "failed" ? "✕" : state === "active" ? `<i class="spin"></i>` : state === "skip" ? "–" : state === "warn" ? "!" : "○"} ${label}</span>`;
 
 function progressSteps(e) {
   const s = e.stage;
@@ -686,6 +698,8 @@ function progressSteps(e) {
   steps.push(step("done", { sent: "WhatsApp sent ✓", delivered: "Delivered ✓✓", read: "Read ✓✓" }[d.whatsapp] || "WhatsApp sent"));
   steps.push(d.status === "CONFIRMED" ? step("done", "Saved to sheet") : d.status === "REJECTED" ? step("skip", "Skipped by you")
     : step("active", "Waiting for your YES / NO"));
+  const lacking = e.documents.find((x) => x.stock_missing?.length);
+  if (lacking) steps.push(step("warn", /margin/i.test(lacking.stock_missing.join(" ")) ? "Margin & figures missing" : `${lacking.stock_missing.length} figures missing`, "Not in the document: " + lacking.stock_missing.join(", ")));
   return steps;
 }
 
@@ -711,7 +725,7 @@ function docSummary(d) {
   const busy = parsing.has(String(d.id));
   return `<div class="doc-sum"><div class="doc-line"><a class="doc-name ellipsis" href="#invoice/${d.id}" title="${esc(d.filename)}">${esc(d.filename)}</a>
     <button class="icon mail-reparse" ${busy ? "disabled" : `data-action="reparse" data-id="${d.id}" data-status="${esc(d.status)}"`} title="${busy ? "Parsing…" : `Read file #${d.id} again`}">${busy ? `<span class="spin"></span>` : ICON.refresh}</button></div>
-    <div>${statusBadge(d.status)}${needsFormatBadge(d.needs_format)}</div>${what ? `<div class="muted" style="font-size:12px">${esc(what)}</div>` : ""}</div>`;
+    <div>${statusBadge(d.status)}${needsFormatBadge(d.needs_format)}${missingBadge(d.stock_missing)}</div>${what ? `<div class="muted" style="font-size:12px">${esc(what)}</div>` : ""}</div>`;
 }
 
 // The serial number of each extracted file (the "#" of the Extracted data table).
@@ -743,7 +757,8 @@ function activityPanel(all, pubsubState, filter) {
       <td class="sel-col">${selBox("emails", e.id)}</td>
       <td class="nowrap">${serials(e.documents)}</td>
       <td class="nowrap"><div>${esc(ago(e.received_at))}</div><div class="muted" style="font-size:12px">${esc(fmtTime(e.received_at))}</div>${timing(e)}</td>
-      <td><div><b>${esc(e.subject || "(no subject)")}</b></div><div class="muted" style="font-size:12px">${esc(s.name)}${e.attachments.length ? " · 📎 " + esc(e.attachments.join(", ")) : ""}</div></td>
+      <td class="act-email"><div class="act-subject clamp2" title="${esc(e.subject || "")}"><b>${esc(e.subject || "(no subject)")}</b></div>
+        <div class="muted act-sub"><span class="act-from">${esc(s.name)}</span>${e.attachments.length ? ` · <span class="act-att" title="${esc(e.attachments.join("\n"))}">📎 ${e.attachments.length === 1 ? esc(e.attachments[0]) : e.attachments.length + " files"}</span>` : ""}</div></td>
       <td>${selectionBadge(e.selection)}</td>
       <td><div class="steps">${progressSteps(e).join("")}</div>
         ${e.stage === "failed" ? `<div class="debit act-fail"><span class="clamp2" title="${esc(e.stage_detail)}">${esc(e.stage_detail)}</span> <button class="icon" data-action="retry" data-id="${e.id}">${ICON.refresh} Retry</button></div>`
@@ -819,7 +834,7 @@ const views = {
         const name = i.pdf_filename.replace(/^[^_]+_/, "");
         const busy = parsing.has(String(i.id));
         return `<div class="mail-file"><a class="mail-file-link" href="#invoice/${i.id}" title="${esc(name)}">${ICON.file}<span class="ellipsis">${esc(name === "email_body.txt" ? "Email body" : name)}</span></a>
-          ${statusBadge(i.status)}${needsFormatBadge(i.needs_format)}
+          ${statusBadge(i.status)}${needsFormatBadge(i.needs_format)}${missingBadge(i.stock_missing)}
           <button class="icon mail-reparse" ${busy ? "disabled" : `data-action="reparse" data-id="${i.id}" data-status="${esc(i.status)}"`} title="${busy ? "Parsing…" : `Read file #${i.id} again`}">${busy ? `<span class="spin"></span>` : ICON.refresh}</button></div>`;
       }).join("");
       const isNew = tests.new(e);
@@ -861,7 +876,20 @@ const views = {
     // PDF text never changes; only re-fetch the record/messages on refresh.
     contentCache[id] ??= api(`/invoices/${id}/content`).catch((e) => { delete contentCache[id]; throw e; });
     const [inv, content] = await Promise.all([api(`/invoices/${id}`), contentCache[id]]);
-    const field = (k, v) => `<div><div class="k">${esc(k)}</div><div class="v ${v ? "" : "empty"}">${v ? esc(v) : "not found"}</div></div>`;
+    // Rate, weight and margin of each goods line of a delivery order: saved into the order, then its stock report is made again.
+    const figs = inv.extra?.delivery_order?.rows?.length ? await api(`/invoices/${id}/stock-figures`).catch(() => null) : null;
+    const FIG = [["rate_per_unit", "Rate per unit", "3800"], ["weight_per_unit", "Weight per unit", "50"], ["weight_measurement", "Weight measurement", "50"], ["margin_pct", "Margin %", "5"]];
+    const figuresPanel = figs ? `<div class="panel"><h2>Stock report figures <span class="right">rate · weight · margin</span></h2>
+      <form class="panel-body figures-form" data-id="${inv.id}">
+        <div class="muted" style="font-size:13px;margin-bottom:10px">Fill in what the document didn't give for ${esc(figs.customer)}. Saving makes this order's stock report again and remembers the figures for this factory's next orders.</div>
+        ${figs.rows.map((r, i) => `<div class="goods-form-row" style="margin-bottom:12px"><b>${esc(r.description || "Goods " + (i + 1))}</b>
+          <div class="fmt-row" style="margin-top:6px">${FIG.map(([k, label, ph]) => `<label class="muted" style="font-size:12px">${label}
+            <input class="field" name="${k}-${i}" inputmode="decimal" value="${esc(r[k])}" placeholder="e.g. ${ph}"></label>`).join("")}</div></div>`).join("")}
+        <div class="fmt-actions" style="padding:0;border:0">
+          <button class="primary" type="submit">Save &amp; make report again</button>
+          <a class="btn" href="/api/invoices/${inv.id}/stock-report" target="_blank" rel="noopener">View stock report PDF ↗</a>
+        </div></form></div>` : "";
+    const field =(k, v) => `<div><div class="k">${esc(k)}</div><div class="v ${v ? "" : "empty"}">${v ? esc(v) : "not found"}</div></div>`;
     const st = content.statement;
     const txns = inv.transactions;
     const canResend = (!st || txns.length) && ["SEND_FAILED", "PENDING_CONFIRMATION"].includes(inv.status);
@@ -909,7 +937,8 @@ const views = {
       </div></div>
       ${x.items_table?.rows?.length ? `<div class="panel"><h2>Items in the document <span class="right">${x.items_table.rows.length} line${x.items_table.rows.length === 1 ? "" : "s"}</span></h2>
         <div class="table-wrap"><table><thead><tr>${(x.items_table.columns || []).map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
-        <tbody>${x.items_table.rows.map((r) => `<tr>${r.map((v) => `<td>${esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table></div></div>` : ""}`;
+        <tbody>${x.items_table.rows.map((r) => `<tr>${r.map((v) => `<td>${esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table></div></div>` : ""}
+      ${figuresPanel}`;
     }
 
     const sourcePanel = `<div class="panel"><h2>Source email</h2><div class="panel-body kv inv-source">
@@ -922,12 +951,13 @@ const views = {
     const rawPanel = `<div class="panel"><details><summary>Raw text read from the ${content.kind === "email" ? "email" : "PDF"} ${content.text ? `<span class="muted">(${content.text.length.toLocaleString()} characters)</span>` : ""}</summary>
         <div class="panel-body">${content.text ? `<pre class="text">${esc(content.text)}</pre>` : `<span class="muted">${content.kind === "pdf_scanned" ? "Scanned PDF: no text layer. Open the file to see it." : "No text available."}</span>`}</div></details></div>`;
 
-    return pageHeader(`${inv.bank_name} · #${inv.id}`, `${statusBadge(inv.status)}${needsFormatBadge(inv.needs_format)} <span class="muted">${esc(inv.pdf_filename.replace(/^[^_]+_/, ""))}</span>`,
+    return pageHeader(`${inv.bank_name} · #${inv.id}`, `${statusBadge(inv.status)}${needsFormatBadge(inv.needs_format)}${missingBadge(inv.stock_missing)} <span class="muted">${esc(inv.pdf_filename.replace(/^[^_]+_/, ""))}</span>`,
       `<button data-action="back">← Back</button>
        <a class="btn" href="/api/invoices/${inv.id}/pdf" target="_blank" rel="noopener">${content.kind === "email" ? "Open email" : "Open file"} ↗</a>
        <button class="danger" data-action="delete" data-id="${inv.id}" data-name="${esc(inv.pdf_filename.replace(/^[^_]+_/, ""))}">${ICON.trash} Delete</button>
        <button class="${inv.status === "FAILED_PARSE" ? "primary" : ""}" data-action="reparse" data-id="${inv.id}" data-status="${inv.status}" ${parsing.has(String(inv.id)) ? "disabled" : ""}>${parsing.has(String(inv.id)) ? `<span class="spin"></span> Parsing…` : "↻ Re-parse file"}</button>
        ${canResend ? `<button class="primary" data-action="resend" data-id="${inv.id}">Resend on WhatsApp</button>` : ""}`) + `
+      ${inv.stock_missing?.length ? `<div class="alert warn"><b>Missing from the stock report:</b> ${inv.stock_missing.map(esc).join(" · ")}.<br>Send them on WhatsApp as a reply to the report (e.g. <span class="mono">margin wheat 5</span>) or fill them in the <a href="#factories">Factories</a> tab; they are remembered for this factory's goods.</div>` : ""}
       ${inv.parse_error && !st ? `<div class="alert bad"><b>Parse error:</b> ${esc(inv.parse_error)}</div>` : ""}
       ${content.error ? `<div class="alert bad"><b>Couldn't read PDF:</b> ${esc(content.error)}</div>` : ""}
       ${st ? `${sourcePanel}${summaryHtml}${rowsHtml}${emailFrame}${waPanel}`
@@ -1078,9 +1108,9 @@ const views = {
     }).join("");
     return pageHeader("Report formats", "The Excel formats the stock report is filled into. Add a sample and the AI works out where each figure goes.") + `
       <form id="format-form" class="panel fmt-add">
-        <label class="fmt-add-file"><span class="muted">Excel sample (.xlsx or .xls)</span>
-          <input class="field" type="file" name="file" accept=".xlsx,.xls" required></label>
-        <label class="fmt-add-name"><span class="muted">Customer name <span style="opacity:.7">(optional)</span></span>
+        <label class="fmt-add-file"><span class="muted">Excel samples (.xlsx or .xls) — select several at once to add in bulk</span>
+          <input class="field" type="file" name="file" accept=".xlsx,.xls" multiple required></label>
+        <label class="fmt-add-name"><span class="muted">Customer name <span style="opacity:.7">(optional, single file only)</span></span>
           <input class="field" name="customer" placeholder="e.g. Al Mustafa Rice Mills"></label>
         <button class="primary" type="submit">Add &amp; let AI read it</button>
         <div class="muted fmt-add-hint">A filled-in report works as a sample: its old stock lines are replaced by the new invoice's goods; its totals, margins and drawing-power formulas stay as they are. Use <b>Preview PDF</b> afterwards to check every figure.</div>
@@ -1213,7 +1243,7 @@ function invoiceTable(list) {
           <div class="muted file-sub">#${i.id} · ${esc(fmtTime(i.created_at))}</div></div></div></td>
       <td>${i.bank_name && i.bank_name !== "Unknown bank" ? esc(i.bank_name) : `<span class="muted">—</span>`}</td>
       <td class="nowrap">${esc(i.txn_date || "—")}</td><td class="num">${i.transaction_counts ? `${i.transaction_counts.total} txns` : esc(i.amount || "—")}</td>
-      <td class="mono">${esc(i.reference_number || "—")}</td><td>${statusBadge(i.status)}${needsFormatBadge(i.needs_format)}</td>
+      <td class="mono">${esc(i.reference_number || "—")}</td><td>${statusBadge(i.status)}${needsFormatBadge(i.needs_format)}${missingBadge(i.stock_missing)}</td>
       <td><button class="icon danger" data-action="delete" data-id="${i.id}" data-name="${esc(name)}" title="Delete this file">${ICON.trash}</button></td></tr>`; }).join("")}
     </tbody></table></div>`;
 }
@@ -1237,6 +1267,34 @@ window.addEventListener("resize", fitActivityRows);
 const bellState = { events: [], alerts: [], toasted: null };
 const BELL_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>`;
 
+// A short two-note chime made in the browser (no audio file); a lower one for a problem. Browsers allow sound only
+// after the page has been clicked once, so the first click or key press unlocks it.
+const sound = { ctx: null, muted: (() => { try { return localStorage.getItem("notifMuted") === "1"; } catch { return false; } })() };
+function audio() {
+  try {
+    sound.ctx ??= new (window.AudioContext || window.webkitAudioContext)();
+    if (sound.ctx.state === "suspended") sound.ctx.resume();
+    return sound.ctx;
+  } catch { return null; }
+}
+["pointerdown", "keydown"].forEach((type) => document.addEventListener(type, audio, { once: true }));
+
+function playChime(urgent) {
+  const ctx = !sound.muted && audio();
+  if (!ctx || ctx.state !== "running") return;
+  (urgent ? [660, 520] : [880, 1175]).forEach((freq, i) => {
+    const t = ctx.currentTime + i * 0.16, osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.4);
+  });
+}
+
 // Problems that are true right now (not events): shown at the top until they are fixed.
 function liveAlerts(s) {
   const alerts = [], wa = s.whatsapp.openwa;
@@ -1258,7 +1316,9 @@ function renderBell() {
   const item = (n, extra = "") => `<a class="notif-item ${extra}" href="${esc(n.link || "#overview")}"><span class="n-ico ${n.tone}">${{ bad: "!", warn: "!", ok: "✓", info: "i", neutral: "·" }[n.tone] || "i"}</span>
     <div class="n-body"><div class="n-title">${esc(n.title)}</div><div class="n-text">${esc(n.text)}</div>${n.at ? `<div class="n-time">${esc(ago(n.at))}</div>` : ""}</div>${n.unread ? `<span class="n-dot"></span>` : ""}</a>`;
   const list = [...bellState.alerts.map((a) => item(a, "alert")), ...bellState.events.map((e) => item(e))].join("");
-  panel.innerHTML = `<div class="notif-head"><b>Notifications</b>${unread ? `<button type="button" data-notif="read">Mark all read</button>` : ""}</div>
+  panel.innerHTML = `<div class="notif-head"><b>Notifications</b><span style="display:flex;gap:6px">
+    <button type="button" data-notif="mute" title="Sound for new notifications">${sound.muted ? "🔕 Sound off" : "🔔 Sound on"}</button>
+    ${unread ? `<button type="button" data-notif="read">Mark all read</button>` : ""}</span></div>
     <div class="notif-list">${list || `<div class="empty-state">You're all caught up.</div>`}</div>`;
 }
 
@@ -1273,7 +1333,11 @@ async function refreshBell(s) {
     else {
       const news = fresh.filter((e) => !bellState.toasted.has(e.id));
       news.forEach((e) => bellState.toasted.add(e.id));
-      if (news.length) toast(news.length > 1 ? `${news.length} new notifications` : `${news[0].title}${news[0].text ? " · " + news[0].text.slice(0, 70) : ""}`, 5000, news.some((e) => e.tone === "bad") ? "warn" : "");
+      if (news.length) {
+        const bad = news.some((e) => e.tone === "bad");
+        toast(news.length > 1 ? `${news.length} new notifications` : `${news[0].title}${news[0].text ? " · " + news[0].text.slice(0, 70) : ""}`, 5000, bad ? "warn" : "");
+        playChime(bad);
+      }
     }
     renderBell();
   } catch { /* the bell is best-effort */ }
@@ -1285,6 +1349,13 @@ document.addEventListener("click", async (ev) => {
   if (ev.target.closest("[data-notif=read]")) {
     await api("/notifications/read", { method: "POST" });
     bellState.events.forEach((e) => { e.unread = false; });
+    renderBell();
+    return;
+  }
+  if (ev.target.closest("[data-notif=mute]")) {
+    sound.muted = !sound.muted;
+    try { localStorage.setItem("notifMuted", sound.muted ? "1" : "0"); } catch { /* not saved */ }
+    playChime(false);  // the person hears what they have just turned on
     renderBell();
     return;
   }
@@ -1656,15 +1727,53 @@ document.addEventListener("submit", async (ev) => {
   btn.disabled = true;
   try {
     if (form.id === "format-form") {
-      btn.textContent = "AI is reading it…";
-      const res = await fetch("/api/stock-templates", { method: "POST", body: new FormData(form) });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
-      toast(`Added "${body.name}". Check its layout and use Preview PDF`);
+      const files = [...form.file.files];
+      const customer = files.length === 1 ? form.customer.value : "";  // one name can't fit many files: the AI reads each sample's own
+      const added = [], failed = [];
+      for (const [i, file] of files.entries()) {
+        btn.textContent = files.length > 1 ? `AI is reading ${i + 1} of ${files.length}…` : "AI is reading it…";
+        const data = new FormData();
+        data.append("file", file);
+        data.append("customer", customer);
+        try {
+          const res = await fetch("/api/stock-templates", { method: "POST", body: data });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+          added.push(body.name);
+        } catch (e) {
+          failed.push(`${file.name}: ${e.message}`);
+        }
+      }
+      if (!failed.length) {
+        toast(files.length === 1 ? `Added "${added[0]}". Check its layout and use Preview PDF` : `Added ${added.length} formats. Check each layout and use Preview PDF`);
+      } else {
+        toast(`Added ${added.length} of ${files.length}. Failed — ${failed.join(" | ")}`);
+      }
     } else {
       await api(`/stock-templates/${encodeURIComponent(form.dataset.id)}`, { method: "PUT", body: { customers: form.customers.value } });
       toast("Saved");
     }
+    await render({ quiet: true });
+  } catch (e) {
+    toast("Error: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+});
+
+document.addEventListener("submit", async (ev) => {
+  if (!ev.target.classList.contains("figures-form")) return;
+  ev.preventDefault();
+  const form = ev.target, btn = form.querySelector("button[type=submit]"), label = btn.textContent;
+  const FIELDS = ["rate_per_unit", "weight_per_unit", "weight_measurement", "margin_pct"];
+  const count = new Set([...form.elements].map((el) => el.name.split("-")[1]).filter((n) => n !== undefined)).size;
+  btn.disabled = true;
+  btn.textContent = "Making the report…";
+  try {
+    const rows = Array.from({ length: count }, (_, i) => Object.fromEntries(FIELDS.map((k) => [k, form.elements[`${k}-${i}`].value])));
+    const r = await api(`/invoices/${form.dataset.id}/stock-figures`, { method: "PUT", body: { rows } });
+    toast(r.missing?.length ? `Saved. Still missing: ${r.missing.join(" · ")}` : "Saved. Stock report made again");
     await render({ quiet: true });
   } catch (e) {
     toast("Error: " + e.message);

@@ -161,6 +161,10 @@ class InvoiceRecord(Base):
     whatsapp_message_id: Mapped[str] = mapped_column(String(128), nullable=True)
     whatsapp_to_number: Mapped[str] = mapped_column(String(32), nullable=True)
 
+    # JSON list of what its stock report still lacks (margin, rate, weight…), as of the last time the report was made:
+    # shown as an alert on the dashboard until the figures are given.
+    stock_missing: Mapped[str] = mapped_column(Text, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     confirmed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
 

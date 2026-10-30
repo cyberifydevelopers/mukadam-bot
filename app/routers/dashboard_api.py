@@ -5,9 +5,11 @@ expose email subjects, extracted financial data and decrypted PDFs, so do
 not bind it to a public interface without putting auth in front.
 """
 
+import copy
 import json
 import logging
 import os
+import re
 import shutil
 from datetime import datetime
 
@@ -32,7 +34,7 @@ from app.models import (
 )
 from app.parsers.statement_rows import parse_statement
 from app.pipeline import reparse_invoice, resend_confirmation, retry_email, sync_gmail
-from app.services import openwa_service, stock_report
+from app.services import goods_profiles, openwa_service, stock_report
 from app.services.document_reader import read_document
 from app.services.pdf_extractor import PdfExtractionError
 from app.worker import pubsub_listener
@@ -68,6 +70,7 @@ def _invoice_json(r: InvoiceRecord) -> dict:
         "confirmed_at": _iso(r.confirmed_at),
         "transaction_counts": _txn_counts(r.transactions) if r.transactions else None,
         "needs_format": stock_report.needs_format(r),
+        "stock_missing": json.loads(r.stock_missing) if r.stock_missing else [],
     }
 
 
@@ -240,7 +243,7 @@ def list_emails(db: Session = Depends(get_db)):
             "saved": any(r.status == InvoiceStatus.CONFIRMED for r in e.invoices),
             "invoices": [
                 {"id": r.id, "pdf_filename": r.pdf_filename, "bank_code": r.bank_code, "status": r.status.value,
-                 "needs_format": stock_report.needs_format(r)}
+                 "needs_format": stock_report.needs_format(r), "stock_missing": json.loads(r.stock_missing) if r.stock_missing else []}
                 for r in e.invoices
             ],
         }
@@ -335,6 +338,71 @@ def invoice_image(invoice_id: int, index: int, db: Session = Depends(get_db)):
     if not 0 <= index < len(doc.image_paths):
         raise HTTPException(404, "No such image")
     return FileResponse(doc.image_paths[index])
+
+
+_FIGURE_FIELDS = ("rate_per_unit", "weight_per_unit", "weight_measurement", "margin_pct")
+_NUMBER = re.compile(r"^\d[\d,]*(?:\.\d+)?$")
+
+
+class FigureRow(BaseModel):
+    rate_per_unit: str = ""
+    weight_per_unit: str = ""
+    weight_measurement: str = ""
+    margin_pct: str = ""
+
+
+class FiguresIn(BaseModel):
+    rows: list[FigureRow]
+
+
+@router.get("/invoices/{invoice_id}/stock-figures")
+def get_stock_figures(invoice_id: int, db: Session = Depends(get_db)):
+    """The goods of a delivery order with the rate / weight / margin its stock report is made with — what the order
+    itself gave, else what is remembered for that customer's goods."""
+    order = stock_report.delivery_order(_get_invoice(db, invoice_id))
+    if order is None:
+        raise HTTPException(404, "This document has no stock report")
+    shown = copy.deepcopy(order)
+    goods_profiles.apply(shown)
+    return {
+        "customer": stock_report._customer(order),
+        "rows": [{"description": row.get("description"), **{f: row.get(f) or "" for f in _FIGURE_FIELDS}} for row in shown["rows"]],
+    }
+
+
+@router.put("/invoices/{invoice_id}/stock-figures")
+def save_stock_figures(invoice_id: int, body: FiguresIn, db: Session = Depends(get_db)):
+    """Saves the rate / weight / margin of each goods line into the order, keeps them for the customer's next orders,
+    and makes its stock report again."""
+    record = _get_invoice(db, invoice_id)
+    raw = json.loads(record.raw_extracted_json or "{}")
+    order = raw.get("delivery_order")
+    if not order or not order.get("rows"):
+        raise HTTPException(404, "This document has no stock report")
+    if len(body.rows) != len(order["rows"]):
+        raise HTTPException(422, "The goods lines have changed; reload the page")
+    for row, given in zip(order["rows"], body.rows):
+        for field in _FIGURE_FIELDS:
+            value = getattr(given, field).strip()
+            if value and not _NUMBER.match(value):
+                raise HTTPException(422, f"{field.replace('_', ' ').capitalize()} must be a number")
+            row[field] = value.replace(",", "") or None
+    record.raw_extracted_json = json.dumps(raw)
+    try:
+        report = stock_report.build(record, regenerate=True)
+    except (stock_report.NoFormatError, stock_report.StockReportError) as exc:
+        db.rollback()
+        raise HTTPException(422, str(exc)) from exc
+    db.commit()
+    return {"saved": True, "missing": report.missing}
+
+
+@router.get("/invoices/{invoice_id}/stock-report")
+def stock_report_pdf(invoice_id: int, db: Session = Depends(get_db)):
+    report = stock_report.latest(_get_invoice(db, invoice_id))
+    if report is None or not os.path.exists(report.pdf_path):
+        raise HTTPException(404, "No stock report has been made for this document yet")
+    return FileResponse(report.pdf_path, media_type=stock_report.PDF_MIME, content_disposition_type="inline")
 
 
 @router.post("/invoices/{invoice_id}/resend")
@@ -554,6 +622,7 @@ def activity(db: Session = Depends(get_db)):
             "filename": r.pdf_filename.split("_", 1)[-1],
             "status": r.status.value,
             "needs_format": stock_report.needs_format(r),
+            "stock_missing": json.loads(r.stock_missing) if r.stock_missing else [],
             "kind": "statement" if r.transactions else extra.get("source_kind"),
             "document_type": extra.get("document_type"),
             "reference": r.reference_number,

@@ -394,7 +394,10 @@ def build_job(template: Template, order: dict, dated: datetime, previous: dict |
 
     # Only the bank-approved sentence goes in — nothing is appended to it — and it keeps the sample's look.
     location = order.get("pledge_location") or "—"
-    put(t.text_cell, _fill_in(t.text, location=location, customer=_customer(order)))
+    # A long run of spaces in the sample only pushed the next words onto a new line (its own location was long
+    # enough to fill the first one); with another location it would show as a gap in mid-line, so it is a line break.
+    sentence = re.sub(r" {10,}", "\n", _fill_in(t.text, location=location, customer=_customer(order)))
+    put(t.text_cell, sentence)
     job["rich"] = {"cell": t.text_cell, "location": location, "customer": _customer(order)}
 
     branch = (order.get("bank_branch") or "").strip()
@@ -699,4 +702,5 @@ def build(record: InvoiceRecord, regenerate: bool = False) -> StockReport:
     report = render(template, order, str(record.id), dated=dated, monthly_record=record.id, regenerate=regenerate)
     report.missing = missing_data(order, template, report, dated)
     report.used = used
+    record.stock_missing = json.dumps(report.missing)  # the dashboard flags it until the figures are given
     return report

@@ -183,6 +183,15 @@ class FiguresRequest:
 
 
 @dataclass
+class Question:
+    sender_phone: str
+    quoted_message_id: str | None  # the report / prompt this was sent as a reply to, if any
+    target_label: str | None  # "16" from "report 16" / "#16" in the text
+    message_id: str
+    text: str
+
+
+@dataclass
 class Reaction:
     message_id: str  # the message that was reacted to (our prompt)
     answer: str  # "yes" / "no"
@@ -215,6 +224,22 @@ _FIGURE_RE = re.compile(
 )
 _FIGURE_NAMES = ("weight_measurement", "weight_per_unit", "drums", "rate", "margin")
 _REPORT_LABEL_RE = re.compile(r"(?:report|record|#)\s*#?\s*(\d+)", re.IGNORECASE)
+
+_QUESTION_START = re.compile(
+    r"^\W*(what|which|who|whom|whose|when|where|why|how|is|are|was|were|do|does|did|can|could|tell|show|list|give me|"
+    r"kya|kaun|kon|kis|kisay|kab|kahan|kyun|kyon|kitna|kitni|kitne|batao|bata|dikhao|btao)\b",
+    re.IGNORECASE,
+)
+_ACKNOWLEDGEMENT = re.compile(
+    r"\W*(ok(ay)?|thanks?( you)?|thx|shukriya|jazak\w*|done|noted|theek|thik|hmm+|hi|hello|salam|assalam\W?o\W?alaikum)\W*",
+    re.IGNORECASE,
+)
+
+
+def looks_like_question(text: str) -> bool:
+    """'what is the margin of wheat for report 16' is a question — not the margin set to 16."""
+    body = (text or "").strip()
+    return "?" in body or bool(_QUESTION_START.match(body))
 
 # Skin-tone variants of 👍/👎 arrive with a modifier appended, so compare the
 # base character only.
@@ -344,6 +369,8 @@ def parse_figures_request(webhook_payload: dict) -> FiguresRequest | None:
     if data.get("fromMe") or data.get("isGroup") or data.get("isStatusBroadcast"):
         return None
     body = data.get("body") or ""
+    if looks_like_question(body):
+        return None  # asking about a figure never sets it
     figures = []
     for line in re.split(r"[;\n]|,\s*(?=[A-Za-z])", body):
         match = _FIGURE_RE.match(line.strip())
@@ -363,6 +390,27 @@ def parse_figures_request(webhook_payload: dict) -> FiguresRequest | None:
         message_id=data.get("id", ""),
         text=body,
         figures=figures,
+    )
+
+
+def parse_question(webhook_payload: dict) -> Question | None:
+    """Any other text message (not a yes/no, a pdf request or figures) is taken as a question about the reports —
+    except a bare 'ok' / 'thanks' / greeting, which gets no answer."""
+    if webhook_payload.get("event") != "message.received":
+        return None
+    data = webhook_payload.get("data") or {}
+    if data.get("fromMe") or data.get("isGroup") or data.get("isStatusBroadcast"):
+        return None
+    body = (data.get("body") or "").strip()
+    if len(re.findall(r"[^\W\d_]", body)) < 3 or _ACKNOWLEDGEMENT.fullmatch(body):
+        return None
+    label = _REPORT_LABEL_RE.search(body)
+    return Question(
+        sender_phone=_sender_phone(data),
+        quoted_message_id=(data.get("quotedMessage") or {}).get("id"),
+        target_label=label.group(1) if label else None,
+        message_id=data.get("id", ""),
+        text=body,
     )
 
 

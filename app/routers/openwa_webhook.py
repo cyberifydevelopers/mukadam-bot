@@ -309,6 +309,49 @@ def _handle_pdf_request(db: Session, request: openwa_service.PdfRequest) -> dict
     return {"status": "ok"}
 
 
+def _spawn(fn, *args) -> None:
+    threading.Thread(target=fn, args=args, daemon=True).start()
+
+
+def _reply_to_question(to_number: str, text: str, record_id: int | None) -> None:
+    """Works out and sends the answer. Runs on its own thread: the AI takes seconds, and a YES from the approver
+    must not wait behind it (webhook deliveries are handled one at a time)."""
+    from app.services import report_qa
+
+    with SessionLocal() as db:
+        record = db.get(InvoiceRecord, record_id) if record_id else None
+        try:
+            reply = report_qa.answer(db, text, record)
+        except report_qa.AnswerError as exc:
+            reply = str(exc)
+        except Exception:  # noqa: BLE001 — the person always gets a reply, never silence
+            logger.exception("Question %r failed", text)
+            reply = "Sorry, something went wrong while looking that up."
+        _send_logged(db, to_number, reply, record)
+        db.commit()
+
+
+def _handle_question(db: Session, question: openwa_service.Question) -> dict:
+    """A question about the reports ("what is margin", "which factory is this from"), as a reply to a stock report
+    or on its own. Only the approver numbers can ask — these are bank documents."""
+    if not question.sender_phone or question.sender_phone not in {_digits(n) for n in settings.notify_numbers_list}:
+        return {"status": "ignored"}
+    if question.message_id and (
+        db.query(WhatsAppMessage.id).filter_by(direction="in", message_id=question.message_id).first()
+    ):
+        return {"status": "duplicate"}
+    record = _record_for_quote(db, question.quoted_message_id)
+    if record is None and question.target_label:
+        record = db.get(InvoiceRecord, int(question.target_label))
+    log_message(
+        db, direction="in", provider="openwa", peer_number=question.sender_phone, text=question.text,
+        status="received", message_id=question.message_id, **_link_ids(record),
+    )
+    db.commit()
+    _spawn(_reply_to_question, question.sender_phone, question.text, record.id if record else None)
+    return {"status": "ok"}
+
+
 def _answer(db: Session, target: Confirmable, answer: str) -> None:
     # None = already handled (OpenWA retried the delivery, or a second
     # reaction on the same prompt) — idempotent no-op.
@@ -383,6 +426,8 @@ def _handle_payload(db: Session, payload: dict) -> dict:
 
     reply = openwa_service.parse_reply(payload)
     if reply is None:
+        if question := openwa_service.parse_question(payload):  # after yes/no, pdf and figures: anything left is a question
+            return _handle_question(db, question)
         return {"status": "ignored"}
     if reply.message_id and (
         db.query(WhatsAppMessage.id).filter_by(direction="in", message_id=reply.message_id).first()
