@@ -192,6 +192,19 @@ class Question:
 
 
 @dataclass
+class PkrRequest:
+    """The rupee side of a document in dollars: the dollar rate, or the PKR amount (one of the two)."""
+
+    sender_phone: str
+    quoted_message_id: str | None
+    target_label: str | None  # "12" from "#12" / "report 12" in the text
+    message_id: str
+    text: str
+    rate: float | None = None  # rupees per dollar
+    amount: float | None = None  # the whole amount in rupees
+
+
+@dataclass
 class Reaction:
     message_id: str  # the message that was reacted to (our prompt)
     answer: str  # "yes" / "no"
@@ -416,6 +429,50 @@ def parse_question(webhook_payload: dict) -> Question | None:
         target_label=label.group(1) if label else None,
         message_id=data.get("id", ""),
         text=body,
+    )
+
+
+# "usd rate 280", "dollar rate is 280", "$ rate = 281.5", "1 usd = 280"
+_USD_RATE_RE = re.compile(
+    r"(?:\b(?:usd|us\s*dollars?|dollars?)\b|\$)\s*(?:to\s*pkr\s*)?rate\s*(?:is|=|:)?\s*(?:rs\.?|pkr)?\s*(\d+(?:\.\d+)?)"
+    r"|\b1\s*(?:usd|dollar|\$)\s*=\s*(?:rs\.?|pkr)?\s*(\d+(?:\.\d+)?)",
+    re.IGNORECASE,
+)
+# "pkr amount 1500000", "amount in pkr 1,500,000", "pkr 1500000", "rs 1500000"
+_PKR_AMOUNT_RE = re.compile(
+    r"^\W*(?:pkr|rs\.?|rupees?)\s*(?:amount|total)?\s*(?:is|=|:)?\s*(\d[\d,]*(?:\.\d+)?)\W*(?:(?:for|of)?\s*(?:#|report|record|order)\s*#?\s*\d+)?\W*$"
+    r"|\bamount\s*(?:in\s*)?(?:pkr|rs\.?|rupees?)\s*(?:is|=|:)?\s*(\d[\d,]*(?:\.\d+)?)",
+    re.IGNORECASE,
+)
+
+
+def parse_pkr_request(webhook_payload: dict) -> PkrRequest | None:
+    """The approver's answer to "this is in USD — send the PKR amount": "usd rate 280" or "pkr amount 1500000" (as a
+    reply to the prompt, or naming the document with "#12"). None for anything else, and for a question."""
+    if webhook_payload.get("event") != "message.received":
+        return None
+    data = webhook_payload.get("data") or {}
+    if data.get("fromMe") or data.get("isGroup") or data.get("isStatusBroadcast"):
+        return None
+    body = (data.get("body") or "").strip()
+    if not body or looks_like_question(body):
+        return None
+    rate = amount = None
+    if found := _USD_RATE_RE.search(body):
+        rate = float(next(g for g in found.groups() if g))
+    elif found := _PKR_AMOUNT_RE.search(body):
+        amount = float(next(g for g in found.groups() if g).replace(",", ""))
+    if rate is None and amount is None:
+        return None
+    label = _REPORT_LABEL_RE.search(body)
+    return PkrRequest(
+        sender_phone=_sender_phone(data),
+        quoted_message_id=(data.get("quotedMessage") or {}).get("id"),
+        target_label=label.group(1) if label else None,
+        message_id=data.get("id", ""),
+        text=body,
+        rate=rate,
+        amount=amount,
     )
 
 

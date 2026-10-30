@@ -279,16 +279,18 @@ def save_profile_figures(db: Session, key: str, name: str, figures: list[tuple[s
         if column is None:
             continue
         words = [w for w in re.findall(r"[a-z]{3,}", hint.lower()) if w not in name_words and w not in _SKIP_WORDS]
-        targets = [g for g in known if g in words] or ([words[0]] if words else sorted(known))
+        spelled = {goods_profiles.loose(w): w for w in words}  # "putty" names the goods kept as "putti"
+        targets = [g for g in known if g in spelled] or ([goods_profiles.loose(words[0])] if words else sorted(known))
         for goods in targets:
             profile = db.query(GoodsProfile).filter_by(customer_key=key, goods_key=goods).first()
             if profile is None:
                 profile = GoodsProfile(customer_key=key, goods_key=goods, customer_name=name)
                 db.add(profile)
                 db.flush()  # the session doesn't autoflush: the next figure for the same goods must find it
+            profile.goods_label = profile.goods_label or (spelled.get(goods) or goods).title()
             setattr(profile, column, value)
             profile.updated_at = datetime.utcnow()
-            notes.append(f"{goods.title()} — {goods_profiles.FIELDS[column]}: {value}")
+            notes.append(f"{profile.goods_label} — {goods_profiles.FIELDS[column]}: {value}")
     db.flush()
     return list(dict.fromkeys(notes))
 

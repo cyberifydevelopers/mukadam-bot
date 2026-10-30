@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session, object_session
 from app.bank_registry import BANK_EMAIL_DOMAINS, BANK_REGISTRY, BankProfile, bank_identity, profile_by_code
 from app.config import settings
 from app.formatting import amount_line, enclosed_documents, format_items
+from app.services import pkr
 from app.services import stock_update
 from app.models import CadContact, GmailSyncState, InvoiceRecord, InvoiceStatus, ProcessedEmail, StatementTransaction
 from app.parsers.base import ExtractedInvoice
@@ -612,6 +613,8 @@ def _send_confirmation(record: InvoiceRecord) -> None:
         lines.append(f"Not found in the document: {', '.join(missing)}")
     if checks := check_lines(extra):
         lines += ["", *checks]
+    if pkr.is_usd(extra):
+        lines += ["", *pkr.prompt_lines(record, extra)]  # the bank has it in dollars: the rupee amount is asked for
     if items:
         lines += ["", f"*Items ({len(table['rows'])})*", "", *items]
     blocks = ["\n".join(lines)]

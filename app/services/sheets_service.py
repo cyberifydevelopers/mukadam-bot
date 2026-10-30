@@ -15,6 +15,7 @@ from app.config import settings
 from app.formatting import quantity_total
 from app.models import InvoiceRecord, StatementTransaction
 from app.verification import check_lines
+from app.services import pkr
 from app.services.google_auth import GOOGLE_API_RETRIES, sheets_client
 
 logger = logging.getLogger(__name__)
@@ -143,7 +144,7 @@ def append_confirmed_invoice(invoice: InvoiceRecord) -> None:
             invoice.pdf_filename,
             (invoice.confirmed_at or datetime.utcnow()).isoformat(),
             invoice.bank_name,
-            extra.get("currency"),
+            pkr.currency_cell(extra, invoice),  # "USD" or, once the rupee amount is known, "USD → PKR 1,400,000 (at 280)"
             extra.get("sender_account"),
             extra.get("receiver_account"),
             extra.get("purpose"),

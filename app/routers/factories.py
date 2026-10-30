@@ -47,12 +47,14 @@ def list_factories(db: Session = Depends(get_db)):
         entry["orders"].add(record.id)
         for row in order["rows"]:
             goods = goods_profiles.goods_key(row.get("description"))
-            if goods:
-                entry["goods"].setdefault(goods, {"key": goods, "orders": set()})["orders"].add(record.id)
+            if goods:  # "Putti" and "Putty" are one goods: shown as the first document spelled it
+                item = entry["goods"].setdefault(goods, {"key": goods, "orders": set(), "label": goods_profiles.goods_label(row.get("description"))})
+                item["orders"].add(record.id)
 
     for profile in db.query(GoodsProfile).all():
         entry = factory(profile.customer_key, profile.customer_name or profile.customer_key)
         item = entry["goods"].setdefault(profile.goods_key, {"key": profile.goods_key, "orders": set()})
+        item["label"] = profile.goods_label or item.get("label")
         item.update({f: getattr(profile, f) for f in goods_profiles.FIELDS}, updated_at=_iso(profile.updated_at), saved=True)
 
     result = []
@@ -60,7 +62,7 @@ def list_factories(db: Session = Depends(get_db)):
         goods = []
         for item in sorted(entry["goods"].values(), key=lambda g: g["key"]):
             goods.append({
-                "key": item["key"], "label": item["key"].title(), "saved": item.get("saved", False),
+                "key": item["key"], "label": item.get("label") or item["key"].title(), "saved": item.get("saved", False),
                 "updated_at": item.get("updated_at"), "orders": sorted(item["orders"]),
                 **{f: item.get(f) for f in goods_profiles.FIELDS},
             })

@@ -91,8 +91,13 @@ def _unit(value: str | None) -> str:
 
 
 def _import_conversion(order: dict) -> bool:
-    """An invoice in USD is shown in rupees per metric ton (like the approved reports) when a rate is set."""
-    return (order.get("currency") or "").strip().upper() == "USD" and settings.usd_pkr_rate > 0
+    """An invoice in USD is shown in rupees per metric ton (like the approved reports) when a rate is known."""
+    return (order.get("currency") or "").strip().upper() == "USD" and _usd_rate(order) > 0
+
+
+def _usd_rate(order: dict) -> float:
+    """Rupees per dollar: the one given for this document (the approver's reply), else the settings' USD_PKR_RATE."""
+    return float(order.get("usd_pkr_rate") or settings.usd_pkr_rate or 0)
 
 
 def _customer(order: dict) -> str:
@@ -181,7 +186,7 @@ def _similarity(a: str, b: str) -> float:
 def _words(description: str) -> str:
     """Lower-case letters without the bracketed part, and spelled loosely: 'Putti' = 'Putty' = 'Phutty'."""
     text = stock_templates.normalise(re.sub(r"\(.*?\)", " ", description or ""))
-    return re.sub(r"(.)\1+", r"\1", text.replace("ph", "p").replace("y", "i"))
+    return goods_profiles.loose(text)
 
 
 def match_lines(rows: list[dict], previous: dict[int, str]) -> list[int | None]:
@@ -360,7 +365,7 @@ def build_job(template: Template, order: dict, dated: datetime, previous: dict |
         rate = _quantity(item.get("rate_per_unit"))
         if rate is not None:
             if convert:
-                rate = round(rate * per * settings.usd_pkr_rate, 2)
+                rate = round(rate * per * _usd_rate(order), 2)
             put(f"{t.rate}{r}", rate, f"{t.rate}{t.first_row}")
         # Figures typed in by the approver (drums, weight…) go into their columns, wherever the format has them.
         for key, col in extra.items():
@@ -667,6 +672,8 @@ def missing_data(order: dict, template: Template, report: StockReport, dated: da
         notes.extend(blank)
     elif no_rate:
         notes.append(f"Rate per unit: {', '.join(no_rate)}. Total Value, Less Margin and Drawing Power could not be worked out")
+    if (order.get("currency") or "").strip().upper() == "USD" and _usd_rate(order) <= 0:
+        notes.append("PKR amount / dollar rate (the document is in USD): reply e.g. \"usd rate 280\" or \"pkr amount 1500000\"")
     if not (order.get("pledge_location") or "").strip():
         notes.append("Godown / pledge location")
     if dated is None:

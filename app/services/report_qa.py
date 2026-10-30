@@ -93,6 +93,7 @@ def _facts(record: InvoiceRecord) -> dict:
         "reference": record.reference_number,
         "document_date": record.txn_date,
         "currency": order.get("currency"),
+        "usd_to_pkr": raw.get("pkr"),
         "email_from": email.sender if email else None,
         "email_subject": email.subject if email else None,
         "email_received": email.received_at.isoformat(timespec="minutes") if email and email.received_at else None,
@@ -124,7 +125,7 @@ def _profiles(db: Session, customer_key: str | None) -> list[dict]:
     if customer_key:
         query = query.filter(GoodsProfile.customer_key == customer_key)
     return [
-        {"factory": p.customer_name or p.customer_key, "goods": p.goods_key,
+        {"factory": p.customer_name or p.customer_key, "goods": p.goods_label or p.goods_key,
          **{label: getattr(p, field) for field, label in goods_profiles.FIELDS.items() if getattr(p, field)}}
         for p in query.order_by(GoodsProfile.customer_name).limit(60)
     ]

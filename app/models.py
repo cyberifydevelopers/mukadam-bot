@@ -76,7 +76,8 @@ class GoodsProfile(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     customer_key: Mapped[str] = mapped_column(String(128), index=True)
-    goods_key: Mapped[str] = mapped_column(String(64))
+    goods_key: Mapped[str] = mapped_column(String(64))  # spelling-neutral (Putti = Putty = Phutty): see goods_profiles.goods_key
+    goods_label: Mapped[str] = mapped_column(String(64), nullable=True)  # the goods as written on the documents, for display
     customer_name: Mapped[str] = mapped_column(String(255), nullable=True)
     margin_pct: Mapped[str] = mapped_column(String(32), nullable=True)
     weight_per_unit: Mapped[str] = mapped_column(String(32), nullable=True)

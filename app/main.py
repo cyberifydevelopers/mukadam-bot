@@ -10,7 +10,7 @@ from app import network, runtime_settings
 from app.config import settings
 from app.database import get_db, init_db
 from app.routers import cad, dashboard_api, factories, gmail_webhook, inventory, invoices, notifications, openwa_webhook, stock_templates, whatsapp_webhook
-from app.services import file_link
+from app.services import file_link, goods_profiles
 from app.worker import pubsub_listener
 from app.worker.scheduler import start_scheduler, stop_scheduler
 
@@ -24,6 +24,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 async def lifespan(app: FastAPI):
     init_db()
     runtime_settings.load_overrides()
+    goods_profiles.migrate_keys()
     pubsub_listener.start()
     start_scheduler(pubsub_active=pubsub_listener.status["state"] == "listening")
     yield

@@ -52,9 +52,10 @@ class GoodsMatching(unittest.TestCase):
         self.assertEqual(len(pairs), 1)
         self.assertEqual(pairs[0][0]["description"], "Putti (munds)")
 
-    @unittest.expectedFailure  # KNOWN GAP: profile keys use the raw first word, so spellings don't share saved figures
     def test_saved_figures_are_shared_across_spellings(self):
-        self.assertEqual(goods_profiles.goods_key("Putty"), goods_profiles.goods_key("Putti"))
+        for a, b in [("Putty", "Putti"), ("Phutty (season 2026-27)", "PUTTI (munds)")]:
+            self.assertEqual(goods_profiles.goods_key(a), goods_profiles.goods_key(b), (a, b))
+        self.assertNotEqual(goods_profiles.goods_key("Putti"), goods_profiles.goods_key("Cotton"))
 
     @unittest.expectedFailure  # KNOWN GAP: same, for "Oil Cake" / "Oilcake"
     def test_saved_figures_oil_cake_one_or_two_words(self):

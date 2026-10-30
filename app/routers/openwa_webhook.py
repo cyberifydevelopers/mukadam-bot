@@ -20,7 +20,7 @@ from app.confirmation import (
 )
 from app.database import SessionLocal
 from app.models import InvoiceRecord, InvoiceStatus, StatementTransaction, WhatsAppMessage
-from app.services import stock_update, openwa_service, stock_report
+from app.services import stock_update, openwa_service, pkr, stock_report
 from app.services.message_log import apply_delivery_status, log_message
 
 logger = logging.getLogger(__name__)
@@ -216,6 +216,51 @@ def _handle_figures_request(db: Session, request: openwa_service.FiguresRequest)
     _send_logged(db, request.sender_phone, "\n".join(lines), record)
     db.commit()
     if applied:
+        _send_stock_report(db, record)
+        db.commit()
+    return {"status": "ok"}
+
+
+def _handle_pkr_request(db: Session, request: openwa_service.PkrRequest) -> dict:
+    """"usd rate 280" / "pkr amount 1500000", the answer to a USD document's request for its rupee amount: kept on the
+    document (as a reply to its message, "#12", or else the newest USD document still without one), and — for a
+    delivery order whose stock report exists — the report is made again in rupees. Only the approver numbers."""
+    if not request.sender_phone or request.sender_phone not in {_digits(n) for n in settings.notify_numbers_list}:
+        return {"status": "ignored"}
+    if request.message_id and (
+        db.query(WhatsAppMessage.id).filter_by(direction="in", message_id=request.message_id).first()
+    ):
+        return {"status": "duplicate"}
+    record = _record_for_quote(db, request.quoted_message_id)
+    if record is None and request.target_label:
+        record = db.get(InvoiceRecord, int(request.target_label))
+    if record is None:
+        record = pkr.latest_usd_record(db)
+    log_message(
+        db, direction="in", provider="openwa", peer_number=request.sender_phone, text=request.text,
+        status="received", message_id=request.message_id, **_link_ids(record),
+    )
+    to = request.sender_phone
+    if record is None:
+        _send_logged(db, to, "Which document is this for? Reply to its message, or write e.g. \"usd rate 280 for #12\".", None)
+        db.commit()
+        return {"status": "ok"}
+    if not pkr.is_usd(json.loads(record.raw_extracted_json or "{}")):
+        _send_logged(db, to, f"#{record.id} is not in USD, so there is nothing to convert.", record)
+        db.commit()
+        return {"status": "ok"}
+    given = pkr.apply(record, rate=request.rate, amount=request.amount)
+    if given is None:
+        _send_logged(db, to, f"I couldn't read the dollar amount of #{record.id}, so send the dollar rate instead, e.g. \"usd rate 280\".", record)
+        db.commit()
+        return {"status": "ok"}
+    db.commit()
+    lines = [f"Got it for #{record.id}: Rs {given['rate']:g} per dollar" + (f" → *PKR {given['amount']:,.0f}*." if given["amount"] else ".")]
+    remake = record.status == InvoiceStatus.CONFIRMED and stock_report.delivery_order(record) is not None
+    lines.append("Making the stock report again in rupees…" if remake else "It goes into the sheet in rupees too once you reply YES." if record.status == InvoiceStatus.PENDING_CONFIRMATION else "")
+    _send_logged(db, to, "\n".join(l for l in lines if l), record)
+    db.commit()
+    if remake:
         _send_stock_report(db, record)
         db.commit()
     return {"status": "ok"}
@@ -426,6 +471,9 @@ def _handle_payload(db: Session, payload: dict) -> dict:
 
     if pdf_request := openwa_service.parse_pdf_request(payload):
         return _handle_pdf_request(db, pdf_request)
+
+    if pkr_request := openwa_service.parse_pkr_request(payload):  # before figures: "usd rate 280" is not a goods rate
+        return _handle_pkr_request(db, pkr_request)
 
     if figures_request := openwa_service.parse_figures_request(payload):
         return _handle_figures_request(db, figures_request)
