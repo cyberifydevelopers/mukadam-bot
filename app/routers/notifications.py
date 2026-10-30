@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import AppSetting, InvoiceRecord, InvoiceStatus, ProcessedEmail
+from app.services import stock_report
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
@@ -38,6 +39,20 @@ def _file(record: InvoiceRecord) -> str:
     return record.pdf_filename.split("_", 1)[-1]
 
 
+def _waiting_for(record) -> list[str]:
+    """What a saved document still needs before it is complete: a report format, or margin / figures."""
+    waiting = []
+    try:
+        if stock_report.needs_format(record):
+            waiting.append("sample (report format)")
+    except Exception:  # noqa: BLE001 — a notification must never fail over this
+        pass
+    missing = json.loads(record.stock_missing) if record.stock_missing else []
+    if missing:
+        waiting.append("margin & figures" if any("margin" in m.lower() for m in missing) else f"{len(missing)} figure(s)")
+    return waiting
+
+
 @router.get("")
 def list_notifications(db: Session = Depends(get_db)):
     seen = _seen(db)
@@ -61,7 +76,13 @@ def list_notifications(db: Session = Depends(get_db)):
     for r in db.query(InvoiceRecord).filter(InvoiceRecord.status.in_(wanted)).order_by(InvoiceRecord.id.desc()).limit(_LIMIT):
         link = f"#invoice/{r.id}"
         if r.status == InvoiceStatus.CONFIRMED:
-            events.append({"id": f"rec-{r.id}-saved", "kind": "saved", "tone": "ok", "title": "Saved to the sheet", "text": f"#{r.id} · {_file(r)}", "at": r.confirmed_at or r.created_at, "link": link})
+            waiting = _waiting_for(r)
+            events.append({
+                "id": f"rec-{r.id}-saved", "kind": "saved", "tone": "warn" if waiting else "ok",
+                "title": "Saved, not complete yet" if waiting else "Saved to the sheet",
+                "text": f"#{r.id} · {_file(r)}" + (f" — waiting for: {', '.join(waiting)}" if waiting else ""),
+                "at": r.confirmed_at or r.created_at, "link": link,
+            })
         elif r.status == InvoiceStatus.REJECTED:
             events.append({"id": f"rec-{r.id}-skipped", "kind": "skipped", "tone": "warn", "title": "Skipped by you", "text": f"#{r.id} · {_file(r)}", "at": r.confirmed_at or r.created_at, "link": link})
         elif r.status == InvoiceStatus.SEND_FAILED:

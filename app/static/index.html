@@ -76,6 +76,14 @@
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .table-wrap { overflow-x: auto; }
   .activity-scroll { overflow-y: auto; }
+  /* Incoming emails: every column shares the window's width, text wraps — no left-right scrolling (a narrow phone screen still scrolls). */
+  .act-table { table-layout: fixed; }
+  .act-table th, .act-table td { padding: 10px 8px; overflow-wrap: anywhere; }
+  .act-table td.nowrap, .act-table .step { white-space: normal; }
+  .act-table .doc-line { min-width: 0; } .act-table .doc-name { flex: 1; min-width: 0; max-width: none; }
+  .act-table .doc-badges { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0; } .act-table .doc-badges .badge { white-space: normal; }
+  .act-table .act-email { max-width: none; }
+  @media (max-width: 900px) { .act-table { table-layout: auto; min-width: 820px; } .act-table td.nowrap { white-space: nowrap; } }
   .scroll { max-height: 560px; overflow: auto; }
   .muted { color: var(--muted); }
   .nowrap { white-space: nowrap; }
@@ -527,6 +535,14 @@ const missingBadge = (list) => {
   const margin = list.some((m) => /margin/i.test(m));
   return ` <span class="badge warn" title="${esc("Not in the document: " + list.join(", ") + ". Send them on WhatsApp (e.g. margin wheat 5) or give them in the Factories tab.")}">${margin ? "Margin &amp; figures missing" : `${list.length} figure${list.length === 1 ? "" : "s"} missing`}</span>`;
 };
+// What a saved document still needs before it is complete: a report format ("Sample required"), or margin / figures.
+// "Saved to sheet" is shown only once none is left.
+const pendingOf = (d) => [
+  d.needs_format && "Sample required",
+  d.stock_missing?.length && (d.stock_missing.some((m) => /margin/i.test(m)) ? "Margin & figures missing" : `${d.stock_missing.length} figure${d.stock_missing.length === 1 ? "" : "s"} missing`),
+].filter(Boolean);
+const docStatusBadge = (d) => d.status === "CONFIRMED" && pendingOf(d).length
+  ? `<span class="badge warn" title="Shown as Saved to sheet once the sample / margin / figures below are given">Not complete yet</span>` : statusBadge(d.status);
 const needsFormatBadge = (x) => x ? ` <span class="badge warn" title="This firm has no report format yet, so no stock report is made. Add its Excel sample in Report formats.">Sample required</span>` : "";
 // Files being re-parsed right now (the request takes a while): shown on their button and in a banner that survives page refreshes.
 const parsing = new Set();
@@ -696,10 +712,17 @@ function progressSteps(e) {
   if (d.status === "SEND_FAILED" || d.whatsapp === "failed") return [...steps, step("failed", "WhatsApp failed")];
   if (!d.whatsapp) return [...steps, step("todo", "WhatsApp")];
   steps.push(step("done", { sent: "WhatsApp sent ✓", delivered: "Delivered ✓✓", read: "Read ✓✓" }[d.whatsapp] || "WhatsApp sent"));
+  const waiting = [...new Set(e.documents.filter((x) => x.status === "CONFIRMED").flatMap(pendingOf))];
+  if (d.status === "CONFIRMED" && waiting.length) {
+    // Not complete: the step stays grey until the sample / margin / figures are given, and says what is waited for.
+    steps.push(step("todo", "Saved to sheet", "Shown as done once everything below is given"));
+    const lacking = e.documents.find((x) => x.stock_missing?.length);
+    waiting.forEach((w) => steps.push(step("warn", w, w === "Sample required" ? "No report format for this firm or bank yet: add its Excel sample in Report formats"
+      : "Not in the document: " + (lacking?.stock_missing || []).join(", "))));
+    return steps;
+  }
   steps.push(d.status === "CONFIRMED" ? step("done", "Saved to sheet") : d.status === "REJECTED" ? step("skip", "Skipped by you")
     : step("active", "Waiting for your YES / NO"));
-  const lacking = e.documents.find((x) => x.stock_missing?.length);
-  if (lacking) steps.push(step("warn", /margin/i.test(lacking.stock_missing.join(" ")) ? "Margin & figures missing" : `${lacking.stock_missing.length} figures missing`, "Not in the document: " + lacking.stock_missing.join(", ")));
   return steps;
 }
 
@@ -725,7 +748,7 @@ function docSummary(d) {
   const busy = parsing.has(String(d.id));
   return `<div class="doc-sum"><div class="doc-line"><a class="doc-name ellipsis" href="#invoice/${d.id}" title="${esc(d.filename)}">${esc(d.filename)}</a>
     <button class="icon mail-reparse" ${busy ? "disabled" : `data-action="reparse" data-id="${d.id}" data-status="${esc(d.status)}"`} title="${busy ? "Parsing…" : `Read file #${d.id} again`}">${busy ? `<span class="spin"></span>` : ICON.refresh}</button></div>
-    <div>${statusBadge(d.status)}${needsFormatBadge(d.needs_format)}${missingBadge(d.stock_missing)}</div>${what ? `<div class="muted" style="font-size:12px">${esc(what)}</div>` : ""}</div>`;
+    <div class="doc-badges">${docStatusBadge(d)}${needsFormatBadge(d.needs_format)}${missingBadge(d.stock_missing)}</div>${what ? `<div class="muted" style="font-size:12px">${esc(what)}</div>` : ""}</div>`;
 }
 
 // The serial number of each extracted file (the "#" of the Extracted data table).
@@ -772,7 +795,8 @@ function activityPanel(all, pubsubState, filter) {
       <span class="right">${listening ? "Listening for new mail (Pub/Sub). New emails appear here within seconds" : "Pub/Sub not active: checking every few minutes"}</span></h2>
     <div class="panel-body" style="padding-bottom:0"><div class="chips">${tabs.map(([v, l, n]) =>
       `<a class="chip ${(filter || "") === v ? "active" : ""}" href="#overview${v ? "/" + v : ""}">${esc(l)} <span>${n}</span></a>`).join("")}</div></div>
-    ${list.length ? `<div class="table-wrap activity-scroll"><table>
+    ${list.length ? `<div class="table-wrap activity-scroll"><table class="act-table">
+      <colgroup><col style="width:36px"><col style="width:54px"><col style="width:10%"><col style="width:18%"><col style="width:8%"><col style="width:28%"><col style="width:20%"><col style="width:56px"></colgroup>
       <thead><tr><th class="sel-col">${selAll("emails")}</th><th>#</th><th>Received</th><th>Email</th><th>Status</th><th>Progress</th><th>Result</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div>`
       : `<div class="empty-state">${filter ? "No emails here." : "No emails yet. Send one with a PDF or Excel attachment and it shows up here as it's processed."}</div>`}
@@ -834,7 +858,7 @@ const views = {
         const name = i.pdf_filename.replace(/^[^_]+_/, "");
         const busy = parsing.has(String(i.id));
         return `<div class="mail-file"><a class="mail-file-link" href="#invoice/${i.id}" title="${esc(name)}">${ICON.file}<span class="ellipsis">${esc(name === "email_body.txt" ? "Email body" : name)}</span></a>
-          ${statusBadge(i.status)}${needsFormatBadge(i.needs_format)}${missingBadge(i.stock_missing)}
+          ${docStatusBadge(i)}${needsFormatBadge(i.needs_format)}${missingBadge(i.stock_missing)}
           <button class="icon mail-reparse" ${busy ? "disabled" : `data-action="reparse" data-id="${i.id}" data-status="${esc(i.status)}"`} title="${busy ? "Parsing…" : `Read file #${i.id} again`}">${busy ? `<span class="spin"></span>` : ICON.refresh}</button></div>`;
       }).join("");
       const isNew = tests.new(e);
@@ -951,7 +975,7 @@ const views = {
     const rawPanel = `<div class="panel"><details><summary>Raw text read from the ${content.kind === "email" ? "email" : "PDF"} ${content.text ? `<span class="muted">(${content.text.length.toLocaleString()} characters)</span>` : ""}</summary>
         <div class="panel-body">${content.text ? `<pre class="text">${esc(content.text)}</pre>` : `<span class="muted">${content.kind === "pdf_scanned" ? "Scanned PDF: no text layer. Open the file to see it." : "No text available."}</span>`}</div></details></div>`;
 
-    return pageHeader(`${inv.bank_name} · #${inv.id}`, `${statusBadge(inv.status)}${needsFormatBadge(inv.needs_format)}${missingBadge(inv.stock_missing)} <span class="muted">${esc(inv.pdf_filename.replace(/^[^_]+_/, ""))}</span>`,
+    return pageHeader(`${inv.bank_name} · #${inv.id}`, `${docStatusBadge(inv)}${needsFormatBadge(inv.needs_format)}${missingBadge(inv.stock_missing)} <span class="muted">${esc(inv.pdf_filename.replace(/^[^_]+_/, ""))}</span>`,
       `<button data-action="back">← Back</button>
        <a class="btn" href="/api/invoices/${inv.id}/pdf" target="_blank" rel="noopener">${content.kind === "email" ? "Open email" : "Open file"} ↗</a>
        <button class="danger" data-action="delete" data-id="${inv.id}" data-name="${esc(inv.pdf_filename.replace(/^[^_]+_/, ""))}">${ICON.trash} Delete</button>
@@ -1243,7 +1267,7 @@ function invoiceTable(list) {
           <div class="muted file-sub">#${i.id} · ${esc(fmtTime(i.created_at))}</div></div></div></td>
       <td>${i.bank_name && i.bank_name !== "Unknown bank" ? esc(i.bank_name) : `<span class="muted">—</span>`}</td>
       <td class="nowrap">${esc(i.txn_date || "—")}</td><td class="num">${i.transaction_counts ? `${i.transaction_counts.total} txns` : esc(i.amount || "—")}</td>
-      <td class="mono">${esc(i.reference_number || "—")}</td><td>${statusBadge(i.status)}${needsFormatBadge(i.needs_format)}${missingBadge(i.stock_missing)}</td>
+      <td class="mono">${esc(i.reference_number || "—")}</td><td>${docStatusBadge(i)}${needsFormatBadge(i.needs_format)}${missingBadge(i.stock_missing)}</td>
       <td><button class="icon danger" data-action="delete" data-id="${i.id}" data-name="${esc(name)}" title="Delete this file">${ICON.trash}</button></td></tr>`; }).join("")}
     </tbody></table></div>`;
 }

@@ -15,9 +15,9 @@ _scheduler = BackgroundScheduler()
 
 
 def _reconcile_job() -> None:
-    """Fallback polling, used ONLY when the Pub/Sub listener isn't running
-    (no subscription configured / no permission): without it new mail would
-    never be picked up at all."""
+    """Periodic check of Gmail from our own cursor. The main way mail arrives when Pub/Sub isn't running, and the
+    safety net when it is: a missed notification must never mean mail waits for the dashboard button. It shares
+    sync_gmail()'s lock and skips mail already seen, so it can't process anything twice."""
     db = SessionLocal()
     try:
         created = sync_gmail(db)
@@ -48,21 +48,25 @@ def _renew_watch_job() -> None:
         db.close()
 
 
+def poll_interval(pubsub_active: bool) -> int:
+    """Seconds between Gmail checks (0 = none): the safety-net interval always, and the fallback one as well when
+    Pub/Sub isn't running — whichever is shorter."""
+    wanted = [settings.gmail_safety_poll_seconds]
+    if not pubsub_active:
+        wanted.append(settings.gmail_reconcile_interval_seconds)
+    wanted = [seconds for seconds in wanted if seconds > 0]
+    return min(wanted) if wanted else 0
+
+
 def start_scheduler(pubsub_active: bool) -> None:
-    """With the Pub/Sub listener running, new mail arrives through it alone —
-    no timer. (A pull subscription holds notifications while the app is
-    down and delivers them on start, so nothing is missed.) The polling
-    job is only a fallback for when Pub/Sub isn't available."""
+    """New mail arrives through the Pub/Sub listener when it runs (a pull subscription holds notifications while
+    the app is down and delivers them on start). Whether or not it does, a periodic check runs too — it is decided
+    only once at startup whether Pub/Sub works, and it can fail afterwards."""
     if _scheduler.running:
         return
-    poll = not pubsub_active and settings.gmail_reconcile_interval_seconds > 0
-    if poll:
-        _scheduler.add_job(
-            _reconcile_job,
-            "interval",
-            seconds=settings.gmail_reconcile_interval_seconds,
-            id="gmail_reconcile",
-        )
+    seconds = poll_interval(pubsub_active)
+    if seconds:
+        _scheduler.add_job(_reconcile_job, "interval", seconds=seconds, id="gmail_reconcile")
     # Keeps Gmail publishing to the topic at all — needed with or without polling.
     # First run right at startup, not one interval later: on a fresh database
     # (e.g. a redeploy on a host with an ephemeral disk) there's no watch or
@@ -75,13 +79,10 @@ def start_scheduler(pubsub_active: bool) -> None:
         next_run_time=datetime.now(),
     )
     _scheduler.start()
-    if poll:
-        logger.warning(
-            "Pub/Sub listener not running — falling back to checking Gmail every %ss",
-            settings.gmail_reconcile_interval_seconds,
-        )
+    if not pubsub_active:
+        logger.warning("Pub/Sub listener not running — checking Gmail every %ss instead", seconds or "(never: polling is off)")
     else:
-        logger.info("New mail via Pub/Sub only (no polling timer)")
+        logger.info("New mail via Pub/Sub, with a safety check of Gmail every %ss", seconds or "(off)")
 
 
 def stop_scheduler() -> None:

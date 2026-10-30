@@ -9,9 +9,11 @@ Google. Each notification only says "something changed" — sync_gmail()
 works out what from its own stored cursor — so a batch of notifications is
 handled with a single sync, and acknowledged only once that sync succeeded
 (an unacknowledged message is redelivered by Pub/Sub, so a failed sync is
-retried rather than lost). While this listener runs there is no polling
-timer (app/worker/scheduler.py); a pull subscription holds notifications
-while the app is down, so nothing is missed.
+retried rather than lost). A pull subscription holds notifications while the
+app is down, so nothing is missed; a periodic safety check (app/worker/scheduler.py)
+also runs, in case notifications stop arriving. Give each running copy of the
+app (server, a laptop…) its OWN subscription on the topic: copies sharing one
+subscription split the notifications between them, so each misses some.
 
 Uses the Pub/Sub REST API through the same OAuth token as Gmail/Sheets,
 which must include the pubsub scope (re-run scripts/gmail_oauth_setup.py

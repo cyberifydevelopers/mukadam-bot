@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     # Fallback polling interval, used only when the Pub/Sub listener can't run
     # (see app/worker/scheduler.py). 0 = never poll.
     gmail_reconcile_interval_seconds: int = 900
+    # A safety-net check that runs ALWAYS, also while Pub/Sub is working: Pub/Sub can stop delivering without anyone
+    # noticing (wrong subscription, lost permission, another copy of the app taking the notifications), and then no
+    # mail would be picked up until somebody pressed "Check Gmail now". One cheap Gmail call; 0 = off.
+    gmail_safety_poll_seconds: int = 120
 
     # Google Sheets output
     google_sheets_spreadsheet_id: str = ""
