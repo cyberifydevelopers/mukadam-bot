@@ -2,6 +2,7 @@
 answers it, and the stock report, the sheet and the caption follow. OpenWA and LibreOffice are mocked; in-memory database."""
 
 import json
+import re
 import unittest
 from datetime import datetime
 from unittest import mock
@@ -69,10 +70,26 @@ class Calculations(Database):
         record = self.usd_record()
         self.assertEqual(pkr.apply(record, amount=1500000), {"rate": 300.0, "amount": 1500000.0})
 
-    def test_without_the_dollar_amount_only_a_rate_can_be_used(self):
+    def test_the_pkr_amount_alone_is_kept_when_the_document_has_no_dollar_figure(self):
         record = self.usd_record(amount=None)
-        self.assertIsNone(pkr.apply(record, amount=1500000))
-        self.assertEqual(pkr.apply(record, rate=280)["rate"], 280.0)
+        self.assertEqual(pkr.apply(record, amount=1500000), {"rate": None, "amount": 1500000.0})
+        self.assertEqual(pkr.pkr_amount(record, json.loads(record.raw_extracted_json)), 1500000.0)
+        self.assertNotIn("usd_pkr_rate", json.dumps(stock_report.delivery_order(record) or {}))  # no rate: nothing to convert by
+
+    def test_nothing_usable_is_refused(self):
+        record = self.usd_record()
+        self.assertIsNone(pkr.apply(record))
+        self.assertIsNone(pkr.apply(record, rate=0))
+        self.assertIsNone(pkr.apply(record, amount=0))
+
+    def test_a_usd_document_without_its_rupee_amount_needs_one(self):
+        record = self.usd_record()
+        with mock.patch.object(settings, "usd_pkr_rate", 0):
+            self.assertTrue(pkr.needed(record))
+            pkr.apply(record, amount=1500000)
+            self.assertFalse(pkr.needed(record))
+        in_rupees = InvoiceRecord(id=21, email_id=1, pdf_filename="h_pkr.pdf", amount="5,000.00", raw_extracted_json=json.dumps({"currency": "PKR"}))
+        self.assertFalse(pkr.needed(in_rupees))
 
     def test_a_delivery_order_carries_the_rate_for_its_stock_report(self):
         record = self.usd_record(extra={"delivery_order": dict(USD_ORDER)})
@@ -107,19 +124,26 @@ class Prompt(Calculations):
             pipeline._send_confirmation(record)
         return "\n".join(sent)
 
-    def test_a_usd_document_asks_for_the_pkr_amount(self):
+    def test_a_usd_document_shows_a_bold_alert_asking_for_the_pkr_amount(self):
         with mock.patch.object(settings, "usd_pkr_rate", 0):
             text = self.prompt_for(self.usd_record())
-        self.assertIn("in USD", text)
+        self.assertIn("🚨 *ALERT — THIS AMOUNT IS IN USD*", text)  # an alert, in bold
+        self.assertIn("*The bank has it in dollars.", text)  # the request is bold too
         self.assertIn("pkr amount 1500000", text)
-        self.assertIn("usd rate 280", text)
+
+    def test_the_bot_never_asks_for_a_dollar_rate(self):
+        with mock.patch.object(settings, "usd_pkr_rate", 0):
+            text = self.prompt_for(self.usd_record())
+        self.assertNotIn("usd rate", text.lower())
+        self.assertNotIn("dollar rate", text.lower())
+        self.assertIn("from the bank", text)
 
     def test_it_shows_the_rupee_amount_instead_once_known(self):
         record = self.usd_record()
         pkr.apply(record, rate=280)
         text = self.prompt_for(record)
         self.assertIn("PKR 1,400,000", text)
-        self.assertNotIn("Please send the *PKR amount*", text)
+        self.assertNotIn("ALERT", text)
 
     def test_a_pkr_document_is_not_asked(self):
         record = self.usd_record(extra={"currency": "PKR"})
@@ -154,8 +178,20 @@ class SheetAndReport(Calculations):
         with mock.patch.object(settings, "usd_pkr_rate", 0):
             notes = stock_report.missing_data(USD_ORDER, template, report, datetime(2026, 10, 30))
             known = stock_report.missing_data({**USD_ORDER, "usd_pkr_rate": 280.0}, template, report, datetime(2026, 10, 30))
-        self.assertTrue(any("dollar rate" in n for n in notes), notes)
-        self.assertFalse(any("dollar rate" in n for n in known), known)
+        self.assertTrue(any("PKR amount" in n and "from the bank" in n for n in notes), notes)
+        self.assertFalse(any("dollar rate" in n.lower() for n in notes), notes)  # never asks for a rate
+        self.assertFalse(any("PKR amount" in n for n in known), known)
+
+
+class DashboardAlert(Calculations):
+    def test_the_api_flags_a_usd_document_without_its_rupee_amount(self):
+        from app.routers import dashboard_api
+
+        record = self.usd_record()
+        with mock.patch.object(settings, "usd_pkr_rate", 0), mock.patch.object(stock_report, "needs_format", return_value=False):
+            self.assertTrue(dashboard_api._invoice_json(record)["needs_pkr"])
+            pkr.apply(record, amount=1500000)
+            self.assertFalse(dashboard_api._invoice_json(record)["needs_pkr"])
 
 
 class Reply(Calculations):
@@ -211,10 +247,12 @@ class Reply(Calculations):
         self.assertIn("not in USD", self.replies()[-1])
         self.assertNotIn("pkr", json.loads(self.db.get(InvoiceRecord, 20).raw_extracted_json))
 
-    def test_an_amount_with_no_dollar_figure_asks_for_the_rate(self):
+    def test_an_amount_with_no_dollar_figure_is_kept_as_it_is(self):
         self.usd_record(amount=None)
         self.say("pkr amount 1500000 for #20")
-        self.assertIn("usd rate 280", self.replies()[-1])
+        self.assertIn("PKR 1,500,000", self.replies()[-1])
+        self.assertNotIn("usd rate", self.replies()[-1].lower())
+        self.assertEqual(json.loads(self.db.get(InvoiceRecord, 20).raw_extracted_json)["pkr"]["amount"], 1500000.0)
 
     def test_a_stranger_changes_nothing(self):
         self.usd_record()
@@ -235,3 +273,61 @@ class Reply(Calculations):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CurrencyLabels(unittest.TestCase):
+    """'Total Value USD' is only for a value shown in dollars; once it is converted the label is the sample's rupees again —
+    also in a report that carries on from an earlier one whose labels were changed to USD."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.template = next(t for i, _, t in stock_report.stock_templates.BUILTIN if i == "cannon-foam")  # currency_cells B26, B28
+
+    def job(self, order, previous=None):
+        with mock.patch.object(settings, "usd_pkr_rate", 0):
+            return stock_report.build_job(self.template, order, datetime(2026, 10, 30), previous)
+
+    def order(self, **extra):
+        return {"customer_name": "Cannon Foam", "currency": "USD", "pledge_location": "Kamoke",
+                "rows": [{"description": "Foam", "opening_balance": "10", "rate_per_unit": "2"}], **extra}
+
+    def labels(self, job):
+        return {cell: (pattern, label) for cell, pattern, label in job.get("replacements", [])}
+
+    def test_a_first_report_in_dollars_says_usd(self):
+        labels = self.labels(self.job(self.order()))
+        self.assertEqual({v[1] for v in labels.values()}, {"USD"})
+        self.assertEqual(set(labels), {"B26", "B28"})
+
+    def test_a_first_report_that_is_converted_keeps_the_samples_rupees(self):
+        self.assertEqual(self.job(self.order(usd_pkr_rate=280.0)).get("replacements"), None)
+
+    def test_a_chained_report_that_is_converted_changes_usd_back_to_rs(self):
+        previous = {"last_row": 21, "lines": {16: "Foam"}}
+        labels = self.labels(self.job(self.order(usd_pkr_rate=280.0), previous))
+        self.assertEqual(set(labels), {"B26", "B28"})
+        for pattern, label in labels.values():
+            self.assertEqual(label, "Rs")
+            self.assertIsNotNone(re.search(pattern, "Total Value USD:"))
+            self.assertEqual(re.sub(pattern, label, "Total Value USD:"), "Total Value Rs:")
+            self.assertEqual(re.sub(pattern, label, "Total Value Rs:"), "Total Value Rs:")  # already rupees: untouched
+
+    def test_a_chained_report_in_dollars_says_usd_even_if_the_earlier_one_said_rs(self):
+        previous = {"last_row": 21, "lines": {16: "Foam"}}
+        labels = self.labels(self.job(self.order(), previous))
+        for pattern, label in labels.values():
+            self.assertEqual(label, "USD")
+            self.assertEqual(re.sub(pattern, label, "Total Value Rs:"), "Total Value USD:")
+
+    def test_a_chained_report_in_rupees_restores_rs(self):
+        previous = {"last_row": 21, "lines": {16: "Foam"}}
+        labels = self.labels(self.job(self.order(currency="PKR"), previous))
+        self.assertEqual({v[1] for v in labels.values()}, {"Rs"})
+
+    def test_the_labels_move_down_with_the_rows_added_to_the_table(self):
+        many = self.order(rows=[{"description": f"Goods {n}", "opening_balance": "1"} for n in range(9)], usd_pkr_rate=280.0)
+        previous = {"last_row": 21, "lines": {16: "Goods 0"}}
+        labels = self.labels(self.job(many, previous))
+        shift = 3 + (21 - self.template.last_row)  # rows missing in the table + rows its earlier reports already added
+        self.assertTrue(all(int(cell[1:]) >= 26 for cell in labels))
+        self.assertEqual(set(labels), {f"B{26 + shift}", f"B{28 + shift}"})

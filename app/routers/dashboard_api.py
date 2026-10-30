@@ -34,7 +34,7 @@ from app.models import (
 )
 from app.parsers.statement_rows import parse_statement
 from app.pipeline import reparse_invoice, resend_confirmation, retry_email, sync_gmail
-from app.services import goods_profiles, openwa_service, stock_report
+from app.services import goods_profiles, openwa_service, pkr, stock_report
 from app.services.document_reader import read_document
 from app.services.pdf_extractor import PdfExtractionError
 from app.worker import pubsub_listener
@@ -69,7 +69,7 @@ def _invoice_json(r: InvoiceRecord) -> dict:
         "created_at": _iso(r.created_at),
         "confirmed_at": _iso(r.confirmed_at),
         "transaction_counts": _txn_counts(r.transactions) if r.transactions else None,
-        "needs_format": stock_report.needs_format(r),
+        "needs_format": stock_report.needs_format(r), "needs_pkr": pkr.needed(r),
         "stock_missing": json.loads(r.stock_missing) if r.stock_missing else [],
     }
 
@@ -243,7 +243,7 @@ def list_emails(db: Session = Depends(get_db)):
             "saved": any(r.status == InvoiceStatus.CONFIRMED for r in e.invoices),
             "invoices": [
                 {"id": r.id, "pdf_filename": r.pdf_filename, "bank_code": r.bank_code, "status": r.status.value,
-                 "needs_format": stock_report.needs_format(r), "stock_missing": json.loads(r.stock_missing) if r.stock_missing else []}
+                 "needs_format": stock_report.needs_format(r), "needs_pkr": pkr.needed(r), "stock_missing": json.loads(r.stock_missing) if r.stock_missing else []}
                 for r in e.invoices
             ],
         }
@@ -621,7 +621,7 @@ def activity(db: Session = Depends(get_db)):
             "id": r.id,
             "filename": r.pdf_filename.split("_", 1)[-1],
             "status": r.status.value,
-            "needs_format": stock_report.needs_format(r),
+            "needs_format": stock_report.needs_format(r), "needs_pkr": pkr.needed(r),
             "stock_missing": json.loads(r.stock_missing) if r.stock_missing else [],
             "kind": "statement" if r.transactions else extra.get("source_kind"),
             "document_type": extra.get("document_type"),

@@ -31,7 +31,7 @@ def between(start, end):
 
 HARNESS = (
     'const esc = (x) => String(x ?? ""); const fmtTime = (x) => x; const statusBadge = (s) => "[" + s + "]";\n'
-    + between("// What a saved document still needs", "const needsFormatBadge")
+    + between("// What a saved document still needs", "const needsFormatBadge")  # pendingOf, usdBadge, docStatusBadge
     + between("// One step of the progress bar", "// Where the time went")
     + '\nconst doc = (extra) => ({ status: "CONFIRMED", whatsapp: "read", needs_format: false, stock_missing: [], ...extra });\n'
     + 'const email = (docs) => ({ stage: "done", received_at: "t", attachments: ["a.pdf"], bank_name: "Meezan", documents: docs });\n'
@@ -74,6 +74,11 @@ class ProgressColumn(unittest.TestCase):
     def test_figures_other_than_margin_are_counted(self):
         self.assertIn("! 2 figures missing", run_js('labels([doc({ stock_missing: ["Rate per unit", "Weight per unit"] })])'))
 
+    def test_a_usd_document_is_flagged_and_holds_saved_to_sheet_back(self):
+        labels = run_js("labels([doc({ needs_pkr: true })])")
+        self.assertNotIn("✓ Saved to sheet", labels)
+        self.assertIn("! Amount in USD: PKR amount needed", labels)
+
     def test_one_incomplete_document_of_two_holds_it_back(self):
         labels = run_js('labels([doc({}), doc({ stock_missing: ["Margin %"] })])')
         self.assertNotIn("✓ Saved to sheet", labels)
@@ -95,6 +100,21 @@ class StatusBadge(unittest.TestCase):
         self.assertEqual(run_js('docStatusBadge(doc({ status: "PENDING_CONFIRMATION", needs_format: true }))'), "[PENDING_CONFIRMATION]")
 
 
+class UsdAlert(unittest.TestCase):
+    def test_the_badge_is_shown_only_for_a_usd_document_still_without_rupees(self):
+        self.assertIn("AMOUNT IS IN USD", run_js("usdBadge({ needs_pkr: true })"))
+        self.assertEqual(run_js("usdBadge({ needs_pkr: false })"), "")
+
+    def test_the_badge_is_bold_and_on_every_document_list(self):
+        self.assertRegex(HTML, r"\.usd-alert \{ font-weight: 800;")
+        self.assertEqual(HTML.count("usdBadge("), 4)  # used in the 4 document lists / headers
+
+    def test_the_document_page_has_a_bold_alert(self):
+        self.assertIn("THIS AMOUNT IS IN USD.", HTML)
+        self.assertIn("Get the PKR amount from the bank", HTML)
+        self.assertNotRegex(HTML, r"usd rate \d+")  # the page never asks for a dollar rate
+
+
 class TableLayout(unittest.TestCase):
     def test_incoming_emails_table_shares_the_window_width(self):
         self.assertIn('<table class="act-table">', HTML)
@@ -103,6 +123,13 @@ class TableLayout(unittest.TestCase):
         percentages = sum(int(n) for n in re.findall(r"width:(\d+)%", cols))
         self.assertLessEqual(percentages, 100)
         self.assertEqual(cols.count("<col"), 8)  # one per column: checkbox, #, received, email, status, progress, result, delete
+
+    def test_the_table_has_no_scrolling_of_its_own_in_either_direction(self):
+        self.assertRegex(HTML, r"\.activity-scroll \{ overflow: visible;")
+        self.assertNotIn("fitActivityRows", HTML)  # it used to cap the table at 5 rows with an inner scrollbar
+        self.assertNotIn("ACTIVITY_VISIBLE_ROWS", HTML)
+        self.assertNotIn("activity-scroll\")?.scrollTop", HTML)
+        self.assertNotIn("min-width: 820px", HTML)  # no narrow-screen fallback that brings a sideways scrollbar back
 
     def test_text_wraps_instead_of_forcing_a_scroll(self):
         self.assertRegex(HTML, r"\.act-table td\.nowrap, \.act-table \.step \{ white-space: normal; \}")

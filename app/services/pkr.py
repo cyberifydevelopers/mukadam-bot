@@ -1,5 +1,6 @@
 """Documents in US dollars: the bank has them in USD, our reports and the sheet are in rupees. The approver is asked for the
-PKR amount (or the dollar rate) in the WhatsApp prompt and answers with e.g. "pkr amount 1500000" or "usd rate 280"; what
+PKR amount in the WhatsApp prompt, a bold alert: the amount comes from the bank, who has it in dollars, so the approver is
+never told to supply a dollar rate. They answer with e.g. "pkr amount 1500000" ("usd rate 280" is understood too); what
 they give is kept on the record (raw_extracted_json["pkr"] = {"rate", "amount"}) and, for a delivery order, as its
 "usd_pkr_rate", which the stock report converts its rates by. USD_PKR_RATE in the settings is the rate used when none was given.
 """
@@ -46,8 +47,8 @@ def prompt_lines(record: InvoiceRecord, extra: dict) -> list[str]:
     if amount:
         return [f"💱 *In USD.* PKR amount: *PKR {amount:,.0f}*" + (f" (at Rs {rate:g} per dollar)" if rate else "")]
     return [
-        "💱 *This amount is in USD* — the bank has it in dollars.",
-        "Please send the *PKR amount*, e.g. `pkr amount 1500000`, or the dollar rate, e.g. `usd rate 280`.",
+        "🚨 *ALERT — THIS AMOUNT IS IN USD*",
+        "*The bank has it in dollars. Please get the PKR amount from the bank and send it here, e.g.* `pkr amount 1500000`",
     ]
 
 
@@ -62,21 +63,22 @@ def currency_cell(extra: dict, record: InvoiceRecord) -> str | None:
 
 
 def apply(record: InvoiceRecord, rate: float | None = None, amount: float | None = None) -> dict | None:
-    """Keeps what the approver gave: the rate, or the rupee amount (then the rate is amount ÷ dollars). Returns
-    {"rate", "amount"} as stored, or None when the dollar amount is needed and can't be read."""
+    """Keeps what the approver gave: the rupee amount (the rate is then amount ÷ dollars, when the document states its
+    dollar amount), or a dollar rate. Returns {"rate", "amount"} as stored — "rate" is None when it can't be worked
+    out — or None when nothing usable was given."""
     extra = json.loads(record.raw_extracted_json or "{}")
     usd = number(record.amount)
-    if rate is None and amount is not None:
-        if not usd:
-            return None
+    if rate is None and amount is not None and usd:
         rate = amount / usd
-    if rate is None or rate <= 0:
+    if (rate is None or rate <= 0) and not (amount and amount > 0):
         return None
-    if amount is None and usd:
+    if rate is not None and rate <= 0:
+        rate = None
+    if amount is None and usd and rate:
         amount = usd * rate
-    given = {"rate": round(rate, 4), "amount": round(amount, 2) if amount else None}
+    given = {"rate": round(rate, 4) if rate else None, "amount": round(amount, 2) if amount else None}
     extra["pkr"] = given
-    if extra.get("delivery_order"):
+    if extra.get("delivery_order") and given["rate"]:
         extra["delivery_order"]["usd_pkr_rate"] = given["rate"]  # the stock report converts its rates by this
     record.raw_extracted_json = json.dumps(extra)
     return given
@@ -88,6 +90,12 @@ def latest_usd_record(db: Session) -> InvoiceRecord | None:
         InvoiceRecord.status.in_((InvoiceStatus.PENDING_CONFIRMATION, InvoiceStatus.CONFIRMED))
     ).order_by(InvoiceRecord.id.desc()).limit(40):
         extra = json.loads(record.raw_extracted_json or "{}")
-        if is_usd(extra) and not (extra.get("pkr") or {}).get("rate"):
+        if is_usd(extra) and not any((extra.get("pkr") or {}).values()):
             return record
     return None
+
+
+def needed(record: InvoiceRecord) -> bool:
+    """A document in USD whose rupee amount isn't known yet — what the dashboard flags with an alert."""
+    extra = json.loads(record.raw_extracted_json or "{}")
+    return is_usd(extra) and not pkr_amount(record, extra) and not rate_for(extra)

@@ -264,6 +264,84 @@ def _keep_row_heights(sheet, heights):
             row.Height = height
 
 
+def _char_width(ch, pt, bold):
+    """About how wide a letter is (1/100 mm): capitals and digits are wider than small letters, bold wider than plain."""
+    if ch == " ":
+        em = 0.25
+    elif ch in "il.,:;'|!()[]":
+        em = 0.3
+    elif ch.isupper() or ch.isdigit():
+        em = 0.62
+    else:
+        em = 0.5
+    return pt * 35.28 * em * (1.1 if bold else 1.0)
+
+
+def _text_height(runs, width):
+    """How tall (1/100 mm) wrapped text needs to be: `runs` as from _portions, `width` the cell's inner width. Estimated from
+    the font sizes, wrapping at spaces and after '-' or '/' and breaking a word that is longer than a line wherever it falls
+    ('26INSU0201-02371' in a narrow cell), so a wider substitute font gets a taller row instead of cut-off text. Deliberately
+    a little generous: an extra bit of space never hides anything."""
+    unit = 35.28  # 1 pt in 1/100 mm
+    paragraphs, current = [], []
+    for text, props in runs:
+        for ch in text:
+            if ch in "\n\r":
+                paragraphs.append(current)
+                current = []
+            else:
+                current.append((ch, props["CharHeight"], props["CharWeight"] > 100))
+    paragraphs.append(current)
+    total = 0.0
+    for para in paragraphs:
+        tokens, token = [], []
+        for item in para:
+            token.append(item)
+            if item[0] in " -/":
+                tokens.append(token)
+                token = []
+        if token:
+            tokens.append(token)
+        line_w, line_pt, lines = 0.0, 0.0, []
+        for token in tokens:
+            widths = [_char_width(*item) for item in token]
+            token_w, token_pt = sum(widths), max(item[1] for item in token)
+            if line_w and line_w + token_w > width:
+                lines.append(line_pt or token_pt)
+                line_w = line_pt = 0.0
+            if token_w > width:
+                for item, w in zip(token, widths):
+                    if line_w and line_w + w > width:
+                        lines.append(line_pt)
+                        line_w = line_pt = 0.0
+                    line_w += w
+                    line_pt = max(line_pt, item[1])
+            else:
+                line_w += token_w
+                line_pt = max(line_pt, token_pt)
+        lines.append(line_pt or 10)
+        total += sum(pt * 1.2 * unit for pt in lines)
+    return total + 120
+
+
+def _grow_wrapped(sheet, names):
+    """A merged cell's row doesn't grow with its text: where the text needs more height than the merged rows have, the
+    last of them is made taller. Rows that already have room are left exactly as the sample made them."""
+    for name in dict.fromkeys(names):
+        cell = sheet.getCellRangeByName(name)
+        if not cell.getString().strip() or not cell.IsTextWrapped:
+            continue
+        cursor = sheet.createCursorByRange(cell)
+        cursor.collapseToMergedArea()
+        a = cursor.RangeAddress
+        width = sum(sheet.Columns.getByIndex(c).Width for c in range(a.StartColumn, a.EndColumn + 1)) - 300
+        have = sum(sheet.Rows.getByIndex(r).Height for r in range(a.StartRow, a.EndRow + 1))
+        need = _text_height(_portions(cell), width)
+        if need > have * 1.02:
+            row = sheet.Rows.getByIndex(a.EndRow)
+            row.Height = row.Height + int(need - have)
+
+
 def _shrink_figures(sheet, fit):
     """A figure wider than its column (a TOTAL such as 25700.000 in a narrow column) would print as ###; its
     font shrinks to fit instead. Nothing changes for a figure that already fits."""
@@ -347,14 +425,20 @@ def fill(job):
             if rich:
                 _restyle_paragraph(sheet.getCellRangeByName(rich["cell"]), snapshot, rich["location"], rich["customer"])
             for name in job.get("date_cells", []):
-                _set_date(sheet.getCellRangeByName(name), job["date"])
+                date_cell = sheet.getCellRangeByName(name)
+                _set_date(date_cell, job["date"])
+                date_cell.IsTextWrapped = False
+                date_cell.ShrinkToFit = True  # a wider font must not cut the date off at the cell's edge
             if job.get("margin_label"):
                 _update_margin_label(sheet, job["margin_label"])
             for name, pattern, replacement in job.get("replacements", []):
                 cell = sheet.getCellRangeByName(name)
                 cell.setString(re.sub(pattern, replacement, cell.getString()))
+                cell.IsTextWrapped = False
+                cell.ShrinkToFit = True  # "Drawing Power USD" is longer than "Drawing Power Rs": it must not be cut at the edge
 
             _keep_row_heights(sheet, heights)
+            _grow_wrapped(sheet, job.get("grow", []))
             if job.get("fit"):
                 _shrink_figures(sheet, job["fit"])
             _fit_to_one_page(doc, sheet)

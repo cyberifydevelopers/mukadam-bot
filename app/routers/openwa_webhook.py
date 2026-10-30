@@ -242,7 +242,7 @@ def _handle_pkr_request(db: Session, request: openwa_service.PkrRequest) -> dict
     )
     to = request.sender_phone
     if record is None:
-        _send_logged(db, to, "Which document is this for? Reply to its message, or write e.g. \"usd rate 280 for #12\".", None)
+        _send_logged(db, to, "Which document is this for? Reply to its message, or write e.g. \"pkr amount 1500000 for #12\".", None)
         db.commit()
         return {"status": "ok"}
     if not pkr.is_usd(json.loads(record.raw_extracted_json or "{}")):
@@ -251,12 +251,13 @@ def _handle_pkr_request(db: Session, request: openwa_service.PkrRequest) -> dict
         return {"status": "ok"}
     given = pkr.apply(record, rate=request.rate, amount=request.amount)
     if given is None:
-        _send_logged(db, to, f"I couldn't read the dollar amount of #{record.id}, so send the dollar rate instead, e.g. \"usd rate 280\".", record)
+        _send_logged(db, to, f"I couldn't use that for #{record.id}. Please send the PKR amount from the bank, e.g. \"pkr amount 1500000\".", record)
         db.commit()
         return {"status": "ok"}
     db.commit()
-    lines = [f"Got it for #{record.id}: Rs {given['rate']:g} per dollar" + (f" → *PKR {given['amount']:,.0f}*." if given["amount"] else ".")]
-    remake = record.status == InvoiceStatus.CONFIRMED and stock_report.delivery_order(record) is not None
+    lines = [f"Got it for #{record.id}: *PKR {given['amount']:,.0f}*" + (f" (Rs {given['rate']:g} per dollar)." if given["rate"] else ".")
+             if given["amount"] else f"Got it for #{record.id}: Rs {given['rate']:g} per dollar."]
+    remake = record.status == InvoiceStatus.CONFIRMED and stock_report.delivery_order(record) is not None and bool(given["rate"])
     lines.append("Making the stock report again in rupees…" if remake else "It goes into the sheet in rupees too once you reply YES." if record.status == InvoiceStatus.PENDING_CONFIRMATION else "")
     _send_logged(db, to, "\n".join(l for l in lines if l), record)
     db.commit()
@@ -278,12 +279,12 @@ def _handle_pdf_request(db: Session, request: openwa_service.PdfRequest) -> dict
         logger.info("OpenWA re-delivered message %s — already handled, ignored", request.message_id)
         return {"status": "duplicate"}
 
-    target = None
-    if request.target_label:
-        target = find_by_label(db, request.target_label)
-    elif request.quoted_message_id:
-        target = find_by_message_id(db, request.quoted_message_id)
+    target = find_by_label(db, request.target_label) if request.target_label else None
     record = db.get(InvoiceRecord, target.invoice_id) if isinstance(target, StatementTransaction) else target
+    if record is None and request.quoted_message_id:
+        # "send report" as a reply to ANY message of that document: its approval prompt, the report we sent, an
+        # acknowledgement, an answer about it…
+        record = _record_for_quote(db, request.quoted_message_id)
     log_message(
         db,
         direction="in",

@@ -313,6 +313,9 @@ def build_job(template: Template, order: dict, dated: datetime, previous: dict |
         "first_row": t.first_row, "last_row": end + added + 1,
         "first_column": min(mapped, key=lambda c: (len(c), c)), "last_column": max(mapped, key=lambda c: (len(c), c)),
     }
+    # Merged cells never grow their row by themselves: the goods descriptions and the godown sentence are checked for height.
+    job["grow"] = [f"{t.lc_column if t.lc_column and _LC.search(i.get('description') or '') else t.description}{at[n]}" for n, i in enumerate(rows)]
+    job["grow"].append(t.text_cell)
     if t.clear_sample and not previous:
         job["clear"] = {
             "first_row": t.first_row, "last_row": max(t.last_row, t.first_row + len(rows) - 1),
@@ -394,8 +397,14 @@ def build_job(template: Template, order: dict, dated: datetime, previous: dict |
             if used_pct is not None:
                 put(f"{t.dp}{r}", f"={t.value}{r}*{100 - used_pct}/100", f"{t.dp}{t.first_row}")
 
+    currency = (order.get("currency") or "").strip().upper()
+    foreign = bool(currency) and currency not in ("PKR", "RS", "RS.") and not convert  # shown in the document's own currency
     if previous:
-        return job  # the previous report already has its sentence, city and currency labels
+        # The previous report already has its sentence and city — and its currency labels, which may be another currency's
+        # (made in USD before the rupee amount was known): "Total Value USD" becomes "Total Value Rs" once converted.
+        if t.currency_cells:
+            job["replacements"] = _currency_labels(t, end + added - t.last_row, currency if foreign else None)
+        return job
 
     # Only the bank-approved sentence goes in — nothing is appended to it — and it keeps the sample's look.
     location = order.get("pledge_location") or "—"
@@ -409,10 +418,23 @@ def build_job(template: Template, order: dict, dated: datetime, previous: dict |
     if t.city_cell and "," in branch:
         put(t.city_cell, _fill_in(t.city_text, city=branch.rsplit(",", 1)[1].strip().rstrip(".")))
 
-    currency = (order.get("currency") or "").strip().upper()
-    if currency and currency not in ("PKR", "RS", "RS.") and not convert:
-        job["replacements"] = [[_shifted(cell, t.last_row, added), r"\bRs\b\.?", currency] for cell in t.currency_cells]
+    if foreign:
+        job["replacements"] = _currency_labels(t, added, currency)
     return job
+
+
+_CURRENCY_CODES = r"(?:PKR|USD|EUR|GBP|AED|SAR|CNY|JPY)"
+
+
+def _currency_labels(t: Template, shift: int, currency: str | None) -> list[list[str]]:
+    """The labels 'Total Value Rs:' / 'Drawing Power Rs:' of the report, as [cell, pattern, replacement]: with a `currency`
+    the document's own ('Total Value USD:'), without one the sample's rupees ('Total Value Rs:') — so a converted value never
+    carries another currency's name. `shift`: how many rows were inserted above them."""
+    if currency:
+        pattern, label = rf"\b(?:Rs|{_CURRENCY_CODES})\b\.?", currency
+    else:
+        pattern, label = rf"\b{_CURRENCY_CODES}\b", "Rs"
+    return [[_shifted(cell, t.last_row, shift), pattern, label] for cell in t.currency_cells]
 
 
 def _soffice() -> str | None:
@@ -673,7 +695,7 @@ def missing_data(order: dict, template: Template, report: StockReport, dated: da
     elif no_rate:
         notes.append(f"Rate per unit: {', '.join(no_rate)}. Total Value, Less Margin and Drawing Power could not be worked out")
     if (order.get("currency") or "").strip().upper() == "USD" and _usd_rate(order) <= 0:
-        notes.append("PKR amount / dollar rate (the document is in USD): reply e.g. \"usd rate 280\" or \"pkr amount 1500000\"")
+        notes.append("PKR amount (the document is in USD): get it from the bank and send e.g. \"pkr amount 1500000\"")
     if not (order.get("pledge_location") or "").strip():
         notes.append("Godown / pledge location")
     if dated is None:

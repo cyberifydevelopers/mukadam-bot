@@ -75,7 +75,7 @@
   tr.click:hover td { background: var(--neutral-bg); }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .table-wrap { overflow-x: auto; }
-  .activity-scroll { overflow-y: auto; }
+  .activity-scroll { overflow: visible; }  /* no scrolling inside this table, either way: the page itself scrolls */
   /* Incoming emails: every column shares the window's width, text wraps — no left-right scrolling (a narrow phone screen still scrolls). */
   .act-table { table-layout: fixed; }
   .act-table th, .act-table td { padding: 10px 8px; overflow-wrap: anywhere; }
@@ -83,7 +83,6 @@
   .act-table .doc-line { min-width: 0; } .act-table .doc-name { flex: 1; min-width: 0; max-width: none; }
   .act-table .doc-badges { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0; } .act-table .doc-badges .badge { white-space: normal; }
   .act-table .act-email { max-width: none; }
-  @media (max-width: 900px) { .act-table { table-layout: auto; min-width: 820px; } .act-table td.nowrap { white-space: nowrap; } }
   .scroll { max-height: 560px; overflow: auto; }
   .muted { color: var(--muted); }
   .nowrap { white-space: nowrap; }
@@ -95,6 +94,7 @@
   .badge.warn { background: var(--warn-bg); color: var(--warn); }
   .badge.bad { background: var(--bad-bg); color: var(--bad); }
   .badge.info { background: var(--info-bg); color: var(--info); }
+  .usd-alert { font-weight: 800; letter-spacing: .02em; }
 
   .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px 24px; }
   .kv div .k { color: var(--muted); font-size: 12px; }
@@ -538,11 +538,13 @@ const missingBadge = (list) => {
 // What a saved document still needs before it is complete: a report format ("Sample required"), or margin / figures.
 // "Saved to sheet" is shown only once none is left.
 const pendingOf = (d) => [
+  d.needs_pkr && "Amount in USD: PKR amount needed",
   d.needs_format && "Sample required",
   d.stock_missing?.length && (d.stock_missing.some((m) => /margin/i.test(m)) ? "Margin & figures missing" : `${d.stock_missing.length} figure${d.stock_missing.length === 1 ? "" : "s"} missing`),
 ].filter(Boolean);
 const docStatusBadge = (d) => d.status === "CONFIRMED" && pendingOf(d).length
   ? `<span class="badge warn" title="Shown as Saved to sheet once the sample / margin / figures below are given">Not complete yet</span>` : statusBadge(d.status);
+const usdBadge = (d) => d.needs_pkr ? ` <span class="badge warn usd-alert" title="The bank has this amount in dollars. Get the PKR amount from the bank and send it on WhatsApp, e.g. pkr amount 1500000">⚠ AMOUNT IS IN USD</span>` : "";
 const needsFormatBadge = (x) => x ? ` <span class="badge warn" title="This firm has no report format yet, so no stock report is made. Add its Excel sample in Report formats.">Sample required</span>` : "";
 // Files being re-parsed right now (the request takes a while): shown on their button and in a banner that survives page refreshes.
 const parsing = new Set();
@@ -718,6 +720,7 @@ function progressSteps(e) {
     steps.push(step("todo", "Saved to sheet", "Shown as done once everything below is given"));
     const lacking = e.documents.find((x) => x.stock_missing?.length);
     waiting.forEach((w) => steps.push(step("warn", w, w === "Sample required" ? "No report format for this firm or bank yet: add its Excel sample in Report formats"
+      : w.startsWith("Amount in USD") ? "The bank has this amount in dollars. Get the PKR amount from the bank and send it on WhatsApp, e.g. pkr amount 1500000"
       : "Not in the document: " + (lacking?.stock_missing || []).join(", "))));
     return steps;
   }
@@ -748,7 +751,7 @@ function docSummary(d) {
   const busy = parsing.has(String(d.id));
   return `<div class="doc-sum"><div class="doc-line"><a class="doc-name ellipsis" href="#invoice/${d.id}" title="${esc(d.filename)}">${esc(d.filename)}</a>
     <button class="icon mail-reparse" ${busy ? "disabled" : `data-action="reparse" data-id="${d.id}" data-status="${esc(d.status)}"`} title="${busy ? "Parsing…" : `Read file #${d.id} again`}">${busy ? `<span class="spin"></span>` : ICON.refresh}</button></div>
-    <div class="doc-badges">${docStatusBadge(d)}${needsFormatBadge(d.needs_format)}${missingBadge(d.stock_missing)}</div>${what ? `<div class="muted" style="font-size:12px">${esc(what)}</div>` : ""}</div>`;
+    <div class="doc-badges">${docStatusBadge(d)}${usdBadge(d)}${needsFormatBadge(d.needs_format)}${missingBadge(d.stock_missing)}</div>${what ? `<div class="muted" style="font-size:12px">${esc(what)}</div>` : ""}</div>`;
 }
 
 // The serial number of each extracted file (the "#" of the Extracted data table).
@@ -858,7 +861,7 @@ const views = {
         const name = i.pdf_filename.replace(/^[^_]+_/, "");
         const busy = parsing.has(String(i.id));
         return `<div class="mail-file"><a class="mail-file-link" href="#invoice/${i.id}" title="${esc(name)}">${ICON.file}<span class="ellipsis">${esc(name === "email_body.txt" ? "Email body" : name)}</span></a>
-          ${docStatusBadge(i)}${needsFormatBadge(i.needs_format)}${missingBadge(i.stock_missing)}
+          ${docStatusBadge(i)}${usdBadge(i)}${needsFormatBadge(i.needs_format)}${missingBadge(i.stock_missing)}
           <button class="icon mail-reparse" ${busy ? "disabled" : `data-action="reparse" data-id="${i.id}" data-status="${esc(i.status)}"`} title="${busy ? "Parsing…" : `Read file #${i.id} again`}">${busy ? `<span class="spin"></span>` : ICON.refresh}</button></div>`;
       }).join("");
       const isNew = tests.new(e);
@@ -975,12 +978,13 @@ const views = {
     const rawPanel = `<div class="panel"><details><summary>Raw text read from the ${content.kind === "email" ? "email" : "PDF"} ${content.text ? `<span class="muted">(${content.text.length.toLocaleString()} characters)</span>` : ""}</summary>
         <div class="panel-body">${content.text ? `<pre class="text">${esc(content.text)}</pre>` : `<span class="muted">${content.kind === "pdf_scanned" ? "Scanned PDF: no text layer. Open the file to see it." : "No text available."}</span>`}</div></details></div>`;
 
-    return pageHeader(`${inv.bank_name} · #${inv.id}`, `${docStatusBadge(inv)}${needsFormatBadge(inv.needs_format)}${missingBadge(inv.stock_missing)} <span class="muted">${esc(inv.pdf_filename.replace(/^[^_]+_/, ""))}</span>`,
+    return pageHeader(`${inv.bank_name} · #${inv.id}`, `${docStatusBadge(inv)}${usdBadge(inv)}${needsFormatBadge(inv.needs_format)}${missingBadge(inv.stock_missing)} <span class="muted">${esc(inv.pdf_filename.replace(/^[^_]+_/, ""))}</span>`,
       `<button data-action="back">← Back</button>
        <a class="btn" href="/api/invoices/${inv.id}/pdf" target="_blank" rel="noopener">${content.kind === "email" ? "Open email" : "Open file"} ↗</a>
        <button class="danger" data-action="delete" data-id="${inv.id}" data-name="${esc(inv.pdf_filename.replace(/^[^_]+_/, ""))}">${ICON.trash} Delete</button>
        <button class="${inv.status === "FAILED_PARSE" ? "primary" : ""}" data-action="reparse" data-id="${inv.id}" data-status="${inv.status}" ${parsing.has(String(inv.id)) ? "disabled" : ""}>${parsing.has(String(inv.id)) ? `<span class="spin"></span> Parsing…` : "↻ Re-parse file"}</button>
        ${canResend ? `<button class="primary" data-action="resend" data-id="${inv.id}">Resend on WhatsApp</button>` : ""}`) + `
+      ${inv.needs_pkr ? `<div class="alert bad"><b>🚨 THIS AMOUNT IS IN USD.</b> <b>The bank has it in dollars. Get the PKR amount from the bank and send it on WhatsApp</b> (reply to the document's message with e.g. <span class="mono">pkr amount 1500000</span>).</div>` : ""}
       ${inv.stock_missing?.length ? `<div class="alert warn"><b>Missing from the stock report:</b> ${inv.stock_missing.map(esc).join(" · ")}.<br>Send them on WhatsApp as a reply to the report (e.g. <span class="mono">margin wheat 5</span>) or fill them in the <a href="#factories">Factories</a> tab; they are remembered for this factory's goods.</div>` : ""}
       ${inv.parse_error && !st ? `<div class="alert bad"><b>Parse error:</b> ${esc(inv.parse_error)}</div>` : ""}
       ${content.error ? `<div class="alert bad"><b>Couldn't read PDF:</b> ${esc(content.error)}</div>` : ""}
@@ -1267,25 +1271,10 @@ function invoiceTable(list) {
           <div class="muted file-sub">#${i.id} · ${esc(fmtTime(i.created_at))}</div></div></div></td>
       <td>${i.bank_name && i.bank_name !== "Unknown bank" ? esc(i.bank_name) : `<span class="muted">—</span>`}</td>
       <td class="nowrap">${esc(i.txn_date || "—")}</td><td class="num">${i.transaction_counts ? `${i.transaction_counts.total} txns` : esc(i.amount || "—")}</td>
-      <td class="mono">${esc(i.reference_number || "—")}</td><td>${docStatusBadge(i)}${needsFormatBadge(i.needs_format)}${missingBadge(i.stock_missing)}</td>
+      <td class="mono">${esc(i.reference_number || "—")}</td><td>${docStatusBadge(i)}${usdBadge(i)}${needsFormatBadge(i.needs_format)}${missingBadge(i.stock_missing)}</td>
       <td><button class="icon danger" data-action="delete" data-id="${i.id}" data-name="${esc(name)}" title="Delete this file">${ICON.trash}</button></td></tr>`; }).join("")}
     </tbody></table></div>`;
 }
-
-// Incoming emails: show 5 rows, scroll for the rest. Rows differ in height
-// (wrapped steps, reasons), so the box is sized from the real rows.
-const ACTIVITY_VISIBLE_ROWS = 5;
-function fitActivityRows() {
-  const box = $(".activity-scroll");
-  if (!box) return;
-  const rows = box.querySelectorAll("tbody tr");
-  if (rows.length <= ACTIVITY_VISIBLE_ROWS) { box.style.maxHeight = ""; return; }
-  const head = box.querySelector("thead")?.offsetHeight || 0;
-  let h = head;
-  for (let i = 0; i < ACTIVITY_VISIBLE_ROWS; i++) h += rows[i].offsetHeight;
-  box.style.maxHeight = `${h + 2}px`;
-}
-window.addEventListener("resize", fitActivityRows);
 
 /* ---------- Notification bell ---------- */
 const bellState = { events: [], alerts: [], toasted: null };
@@ -1518,15 +1507,11 @@ async function render({ quiet = false } = {}) {
     // The user may have clicked elsewhere while this loaded; don't overwrite that page.
     if ((location.hash.slice(1) || "overview") === route) {
       const scrollY = window.scrollY;
-      const inner = $(".activity-scroll")?.scrollTop || 0;
       main.innerHTML = html;
-      fitActivityRows();
       applySelection();
       openFirstReport();
       if (quiet) {
         window.scrollTo(0, scrollY);
-        const box = $(".activity-scroll");
-        if (box) box.scrollTop = inner;  // keep the list where the user scrolled it
       }
     }
     currentRoute = route;

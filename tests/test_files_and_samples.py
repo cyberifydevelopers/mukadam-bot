@@ -102,6 +102,51 @@ class FileRequestHandling(Database):
             openwa_webhook._handle_payload(self.db, payload("share pdf for 3"))
         self.send_document.assert_not_called()
 
+    def reply_to(self, quoted_id, text="send report", message_id="mq"):
+        with mock.patch.object(stock_report, "build", return_value=self.report) as build:
+            result = openwa_webhook._handle_payload(self.db, payload(text, quoted=quoted_id, message_id=message_id))
+        self.db.commit()
+        return result, build
+
+    def bot_message(self, message_id, invoice_id=3, direction="out"):
+        from app.models import WhatsAppMessage
+
+        self.db.add(WhatsAppMessage(direction=direction, provider="openwa", peer_number=APPROVER, text="x", status="sent",
+                                    message_id=message_id, invoice_id=invoice_id))
+        self.db.commit()
+
+    def test_send_report_as_a_reply_to_the_report_we_sent_brings_that_documents_report(self):
+        self.bot_message("wamid.REPORT")  # the PDF the bot sent for #3
+        _, build = self.reply_to("wamid.REPORT")
+        build.assert_called_once()
+        self.assertEqual(build.call_args.args[0].id, 3)
+        self.assertEqual(self.sent_files(), ["C:/r/Mian Cotton.pdf", "C:/r/Mian Cotton.xlsx"])
+
+    def test_it_works_on_any_message_about_the_document(self):
+        for n, kind in enumerate(("acknowledgement", "answer", "your own earlier message")):
+            self.send_document.reset_mock()
+            self.bot_message(f"wamid.{n}", direction="in" if n == 2 else "out")
+            self.reply_to(f"wamid.{n}", message_id=f"mq{n}")
+            self.assertEqual(len(self.sent_files()), 2, kind)
+
+    def test_other_wordings_work_on_a_quoted_message_too(self):
+        self.bot_message("wamid.REPORT")
+        for n, text in enumerate(("pdf", "report", "excel", "shared pdf", "send me the report please")):
+            self.send_document.reset_mock()
+            self.reply_to("wamid.REPORT", text=text, message_id=f"mw{n}")
+            self.assertEqual(len(self.sent_files()), 2, text)
+
+    def test_a_quote_of_a_message_we_know_nothing_about_says_so(self):
+        with mock.patch.object(openwa_webhook, "_send_logged") as say:
+            self.reply_to("wamid.UNKNOWN")
+        self.send_document.assert_not_called()
+        self.assertIn("couldn't find", say.call_args.args[2])
+
+    def test_a_number_in_the_text_wins_over_the_quote(self):
+        self.bot_message("wamid.REPORT", invoice_id=99)
+        _, build = self.reply_to("wamid.REPORT", text="send report 3")
+        self.assertEqual(build.call_args.args[0].id, 3)
+
     def test_a_stranger_cannot_ask_for_files(self):
         result = openwa_webhook._handle_payload(self.db, payload("share pdf for 3", sender="923009999999@c.us"))
         self.assertEqual(result["status"], "ignored")
