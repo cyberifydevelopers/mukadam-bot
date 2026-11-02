@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import threading
 
 from fastapi import APIRouter, Query, Request, Response
 
@@ -48,12 +49,21 @@ async def receive_gmail_push(
             payload.get("historyId"),
         )
 
+    # Reading a document takes a minute, far past Pub/Sub's ack deadline (and would freeze the server meanwhile):
+    # answer at once and sync in the background. A sync that fails is picked up by the periodic check.
+    threading.Thread(target=_sync_everyone, name="gmail-push-sync", daemon=True).start()
+
+    # Pub/Sub retries on anything but a 2xx, so always ack.
+    return {"status": "ok"}
+
+
+def _sync_everyone() -> None:
     for user_id in tenancy.user_ids():
         with tenancy.use(user_id), SessionLocal() as db:
-            created = sync_gmail(db)
-            if created:
-                logger.info("Gmail push triggered sync, queued %d new invoice(s) (user %s)", created, user_id)
-
-    # Pub/Sub retries on anything but a 2xx — always ack once we've synced,
-    # even if `created` is 0, so it doesn't redeliver a no-op notification.
-    return {"status": "ok"}
+            try:
+                created = sync_gmail(db)
+                if created:
+                    logger.info("Gmail push triggered sync, queued %d new invoice(s) (user %s)", created, user_id)
+            except Exception:
+                logger.exception("Sync after Gmail push failed (user %s)", user_id)
+                db.rollback()
