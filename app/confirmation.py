@@ -8,6 +8,7 @@ webhooks, which differ only in how the answer arrives.
 """
 
 import json
+import logging
 import re
 from datetime import datetime
 
@@ -17,6 +18,8 @@ from app.config import settings
 from app.formatting import amount_line
 from app.models import InvoiceRecord, InvoiceStatus, StatementTransaction
 from app.services.sheets_service import append_confirmed_invoice, append_confirmed_transactions
+
+logger = logging.getLogger(__name__)
 
 Confirmable = InvoiceRecord | StatementTransaction
 
@@ -51,9 +54,9 @@ def pending_for_number(db: Session, phone_digits: str) -> list[Confirmable]:
     return pending
 
 
-def _saved_invoice_text(record: InvoiceRecord) -> str:
+def _saved_invoice_text(record: InvoiceRecord, sheet_ok: bool = True) -> str:
     extra = json.loads(record.raw_extracted_json or "{}")
-    where = f" to the {record.bank_code} sheet" if _sheet_on() else ""
+    where = f" to the {record.bank_code} sheet" if _sheet_on() and sheet_ok else ""
     lines = [f"Saved{where}:", extra.get("document_type") or "Invoice"]
     if record.reference_number:
         lines.append(f"Reference:  {record.reference_number}")
@@ -68,6 +71,17 @@ def _sheet_on() -> bool:
     """Rows go to a Google Sheet only when one is set up (GOOGLE_SHEETS_SPREADSHEET_ID); otherwise the dashboard is
     where confirmed documents are kept."""
     return bool(settings.google_sheets_spreadsheet_id)
+
+
+def _to_sheet(write, rows) -> bool:
+    """The Sheet is an extra copy: the answer is kept on the dashboard even when the Sheet can't be written
+    (no permission, offline…)."""
+    try:
+        write(rows)
+        return True
+    except Exception:  # noqa: BLE001
+        logger.exception("Could not write to the Google Sheet; the answer is saved without it")
+        return False
 
 
 def label_of(target: Confirmable) -> str:
@@ -98,8 +112,7 @@ def apply_answer(db: Session, target: Confirmable, answer: str) -> str | None:
         target.confirmed_at = now if answer == "yes" else None
         db.flush()
         if answer == "yes":
-            if _sheet_on():
-                append_confirmed_transactions(rows)
+            if _sheet_on() and _to_sheet(append_confirmed_transactions, rows):
                 ack = f"Saved: {len(rows)} transactions of statement #{target.id} added to the \"{target.bank_code} Transactions\" sheet."
             else:
                 ack = f"Saved: {len(rows)} transactions of statement #{target.id}."
@@ -110,15 +123,13 @@ def apply_answer(db: Session, target: Confirmable, answer: str) -> str | None:
         target.confirmed_at = now
         db.flush()
         if isinstance(target, StatementTransaction):
-            if _sheet_on():
-                append_confirmed_transactions([target])
+            if _sheet_on() and _to_sheet(append_confirmed_transactions, [target]):
                 ack = f"Saved {target.label} to the {target.bank_code} Transactions sheet."
             else:
                 ack = f"Saved {target.label}."
         else:
-            if _sheet_on():
-                append_confirmed_invoice(target)
-            ack = _saved_invoice_text(target)
+            sheet_ok = _sheet_on() and _to_sheet(append_confirmed_invoice, target)
+            ack = _saved_invoice_text(target, sheet_ok)
     else:
         target.status = InvoiceStatus.REJECTED
         ack = f"Skipped: {label_of(target)} was not saved."

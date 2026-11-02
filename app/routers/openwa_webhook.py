@@ -447,23 +447,30 @@ def _users_for(payload: dict) -> list[int | None]:
     approver is answering; a delivery receipt or reaction names no sender, so every user is looked through."""
     if payload.get("event") in ("message.ack", "message.reaction"):
         return tenancy.user_ids()
-    owners = runtime_settings.all_notify_numbers()
     phone = openwa_service._sender_phone(payload.get("data") or {})
-    return [owners[phone]] if phone in owners else []
+    users = []
+    for user_id in tenancy.user_ids():
+        with tenancy.use(user_id):
+            if phone and phone in {_digits(n) for n in runtime_settings.notify_numbers()}:
+                users.append(user_id)  # the same number can approve for more than one user
+    return users
 
 
 def _handle(payload: dict) -> dict:
     with _HANDLE_LOCK:
         result = {"status": "ignored"}
-        for user_id in _users_for(payload):
+        users = _users_for(payload)
+        for n, user_id in enumerate(users):
             with tenancy.use(user_id), SessionLocal() as db:
-                result = _handle_payload(db, payload)
+                result = _handle_payload(db, payload, last=n == len(users) - 1)
             if payload.get("event") != "message.ack" and result.get("status") != "ignored":
                 break
         return result
 
 
-def _handle_payload(db: Session, payload: dict) -> dict:
+def _handle_payload(db: Session, payload: dict, last: bool = True) -> dict:
+    """`last`: no other user shares the sender's number after this one. A YES / NO that finds nothing pending here is
+    passed on to the next user rather than answered."""
     if payload.get("event") == "message.ack":
         data = payload.get("data") or {}
         if data.get("messageId") and apply_delivery_status(db, data["messageId"], data.get("status", "")):
@@ -510,6 +517,8 @@ def _handle_payload(db: Session, payload: dict) -> dict:
         return {"status": "duplicate"}
 
     target, message = _find_target(db, reply)
+    if target is None and not last:
+        return {"status": "ignored"}
     log_message(
         db,
         direction="in",
