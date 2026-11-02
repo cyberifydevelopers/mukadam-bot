@@ -1,9 +1,8 @@
 """Settings that can be changed from the dashboard without a restart.
 
-The value is saved in the `app_settings` table and written onto the shared
-`settings` object, so every reader (pipeline, webhooks, dashboard) sees it
-at once. On startup, saved values override .env; with nothing saved, .env
-is used as before.
+The value is saved in the signed-in user's own `app_settings` table, so each person
+has their own. With nothing saved, the first user (whose data predates sign-in)
+uses .env as before.
 """
 
 import logging
@@ -11,6 +10,7 @@ import re
 
 from sqlalchemy.orm import Session
 
+from app import tenancy
 from app.config import settings
 from app.database import SessionLocal
 from app.models import AppSetting
@@ -24,12 +24,23 @@ class InvalidSetting(ValueError):
     pass
 
 
-def load_overrides() -> None:
+def notify_numbers() -> list[str]:
+    """The WhatsApp number(s) that approve this user's documents."""
     with SessionLocal() as db:
         row = db.get(AppSetting, NOTIFY_NUMBERS_KEY)
-        if row is not None:
-            settings.notify_whatsapp_numbers = row.value
-            logger.info("WhatsApp prompt number(s) from dashboard setting: %s", row.value)
+    if row is not None:
+        return [n for n in row.value.split(",") if n]
+    return settings.notify_numbers_list if tenancy.is_first_user() else []
+
+
+def all_notify_numbers() -> dict[str, int | None]:
+    """Every approver number of every user -> the user it belongs to (to tell whose message a WhatsApp reply is)."""
+    owners = {}
+    for user_id in tenancy.user_ids():
+        with tenancy.use(user_id):
+            for number in notify_numbers():
+                owners.setdefault(re.sub(r"\D", "", number), user_id)
+    return owners
 
 
 def notify_numbers_source(db: Session) -> str:
@@ -59,6 +70,5 @@ def set_notify_numbers(db: Session, raw: str) -> list[str]:
     else:
         row.value = value
     db.commit()
-    settings.notify_whatsapp_numbers = value
     logger.info("WhatsApp prompt number(s) changed from the dashboard to %s", value)
     return numbers

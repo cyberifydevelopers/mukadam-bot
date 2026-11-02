@@ -16,7 +16,10 @@ from google_auth_httplib2 import AuthorizedHttp
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
+from app import tenancy
 from app.config import settings
+from app.database import SessionLocal
+from app.models import AppSetting
 
 PUBSUB_SCOPE = "https://www.googleapis.com/auth/pubsub"
 
@@ -40,6 +43,31 @@ class GoogleAuthError(Exception):
     pass
 
 
+# What people sign in for with "Continue with Google": reading their mail. The login is kept in their own database
+# (it survives a redeploy, where a token file on the host's disk would not).
+LOGIN_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+TOKEN_KEY = "google_token_json"
+
+
+def _stored_token() -> str:
+    try:
+        with SessionLocal() as db:
+            row = db.get(AppSetting, TOKEN_KEY)
+            return row.value if row else ""
+    except Exception:  # no table yet (before init_db) or db down: fall back to the file
+        return ""
+
+
+def save_token(token_json: str) -> None:
+    with SessionLocal() as db:
+        row = db.get(AppSetting, TOKEN_KEY)
+        if row is None:
+            db.add(AppSetting(key=TOKEN_KEY, value=token_json))
+        else:
+            row.value = token_json
+        db.commit()
+
+
 def _token_file_usable() -> bool:
     path = settings.google_token_file
     if not os.path.exists(path) or os.path.getsize(path) == 0:
@@ -53,6 +81,22 @@ def _token_file_usable() -> bool:
 
 
 def _load_credentials() -> Credentials:
+    """The Google login of the user the code is working for. The first user's mailbox set up in .env
+    (token.json / GOOGLE_TOKEN_JSON) is used until they sign in."""
+    stored = _stored_token()
+    if stored:
+        try:
+            creds = Credentials.from_authorized_user_info(json.loads(stored))
+        except ValueError as exc:
+            raise GoogleAuthError(f"The saved Google login is not valid ({exc}). Sign in with Google again.") from exc
+        return _refreshed(creds, lambda: save_token(creds.to_json()))
+    if not tenancy.is_first_user():
+        raise GoogleAuthError("Google is not connected. Sign in with Google again.")
+    return _load_app_credentials()
+
+
+def _load_app_credentials() -> Credentials:
+    """The login from .env: the first user's Gmail before they sign in, and what pulls Pub/Sub for everybody."""
     token_json = settings.google_token_json.strip()
     if token_json and not _token_file_usable():
         # Refreshed tokens are written back to this file below; on a host with
@@ -85,24 +129,30 @@ def _load_credentials() -> Credentials:
             "— it must hold the whole token.json, from { to }."
         ) from exc
 
+    def write_file() -> None:
+        with open(settings.google_token_file, "w") as f:
+            f.write(creds.to_json())
+
+    return _refreshed(creds, write_file)
+
+
+def _refreshed(creds: Credentials, save) -> Credentials:
     if creds.expired and creds.refresh_token:
         try:
             creds.refresh(Request())
         except RefreshError as exc:
             # Raised as GoogleAuthError so an expired login can't crash app startup (see has_scope).
             raise GoogleAuthError(
-                f"Google login expired or was revoked ({exc}). Run `python scripts/gmail_oauth_setup.py` again "
-                "and, on a host, update GOOGLE_TOKEN_JSON with the new token.json."
+                f"Google login expired or was revoked ({exc}). Sign in with Google again "
+                "(for the Gmail set up in .env: `python scripts/gmail_oauth_setup.py`)."
             ) from exc
-        with open(settings.google_token_file, "w") as f:
-            f.write(creds.to_json())
-
+        save()
     return creds
 
 
 def has_scope(scope: str) -> bool:
     try:
-        return scope in (_load_credentials().scopes or [])
+        return scope in (_load_app_credentials().scopes or [])
     except GoogleAuthError:
         return False
 
@@ -123,5 +173,6 @@ PUBSUB_HTTP_TIMEOUT = 90
 
 
 def pubsub_client():
-    http = AuthorizedHttp(_load_credentials(), http=httplib2.Http(timeout=PUBSUB_HTTP_TIMEOUT))
+    # One subscription serves everybody, so it is read with the login from .env, not a person's own.
+    http = AuthorizedHttp(_load_app_credentials(), http=httplib2.Http(timeout=PUBSUB_HTTP_TIMEOUT))
     return build("pubsub", "v1", http=http, cache_discovery=False)

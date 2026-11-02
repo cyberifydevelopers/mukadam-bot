@@ -30,6 +30,7 @@ from dataclasses import dataclass
 
 import httpx
 
+from app import runtime_settings
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -272,8 +273,7 @@ def _phone_for_lid(lid: str) -> str:
     OpenWA which @lid each approver number (NOTIFY_WHATSAPP_NUMBERS) has.
     Only approvers need resolving — nobody else's YES is ever acted on."""
     if lid not in _LID_TO_PHONE:
-        for number in settings.notify_numbers_list:
-            digits = re.sub(r"\D", "", number)
+        for digits in runtime_settings.all_notify_numbers():
             if digits in _LID_TO_PHONE.values():
                 continue
             try:

@@ -13,6 +13,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.formatting import amount_line
 from app.models import InvoiceRecord, InvoiceStatus, StatementTransaction
 from app.services.sheets_service import append_confirmed_invoice, append_confirmed_transactions
@@ -52,7 +53,8 @@ def pending_for_number(db: Session, phone_digits: str) -> list[Confirmable]:
 
 def _saved_invoice_text(record: InvoiceRecord) -> str:
     extra = json.loads(record.raw_extracted_json or "{}")
-    lines = [f"Saved to the {record.bank_code} sheet:", extra.get("document_type") or "Invoice"]
+    where = f" to the {record.bank_code} sheet" if _sheet_on() else ""
+    lines = [f"Saved{where}:", extra.get("document_type") or "Invoice"]
     if record.reference_number:
         lines.append(f"Reference:  {record.reference_number}")
     if record.txn_date:
@@ -60,6 +62,12 @@ def _saved_invoice_text(record: InvoiceRecord) -> str:
     if amount := amount_line(record):
         lines.append(f"{amount[0]}:  {amount[1]}")
     return "\n".join(lines)
+
+
+def _sheet_on() -> bool:
+    """Rows go to a Google Sheet only when one is set up (GOOGLE_SHEETS_SPREADSHEET_ID); otherwise the dashboard is
+    where confirmed documents are kept."""
+    return bool(settings.google_sheets_spreadsheet_id)
 
 
 def label_of(target: Confirmable) -> str:
@@ -90,8 +98,11 @@ def apply_answer(db: Session, target: Confirmable, answer: str) -> str | None:
         target.confirmed_at = now if answer == "yes" else None
         db.flush()
         if answer == "yes":
-            append_confirmed_transactions(rows)
-            ack = f"Saved: {len(rows)} transactions of statement #{target.id} added to the \"{target.bank_code} Transactions\" sheet."
+            if _sheet_on():
+                append_confirmed_transactions(rows)
+                ack = f"Saved: {len(rows)} transactions of statement #{target.id} added to the \"{target.bank_code} Transactions\" sheet."
+            else:
+                ack = f"Saved: {len(rows)} transactions of statement #{target.id}."
         else:
             ack = f"Skipped: statement #{target.id} ({len(rows)} transactions) was not saved."
     elif answer == "yes":
@@ -99,10 +110,14 @@ def apply_answer(db: Session, target: Confirmable, answer: str) -> str | None:
         target.confirmed_at = now
         db.flush()
         if isinstance(target, StatementTransaction):
-            append_confirmed_transactions([target])
-            ack = f"Saved {target.label} to the {target.bank_code} Transactions sheet."
+            if _sheet_on():
+                append_confirmed_transactions([target])
+                ack = f"Saved {target.label} to the {target.bank_code} Transactions sheet."
+            else:
+                ack = f"Saved {target.label}."
         else:
-            append_confirmed_invoice(target)
+            if _sheet_on():
+                append_confirmed_invoice(target)
             ack = _saved_invoice_text(target)
     else:
         target.status = InvoiceStatus.REJECTED

@@ -313,10 +313,10 @@ def save_from_order(db: Session, order: dict) -> tuple[str, list[str]] | None:
 
 def announce_profile(db: Session, record: InvoiceRecord, factory: str, notes: list[str]) -> None:
     """Tells the approver what a figures-only email / letter saved."""
-    from app.config import settings
+    from app import runtime_settings
     from app.routers import openwa_webhook
 
-    numbers = settings.notify_numbers_list
+    numbers = runtime_settings.notify_numbers()
     if not numbers:
         return
     lines = [f"Saved for {factory} (from #{record.id}):", *(f"• {n}" for n in notes), "", "Used from the next invoice of these goods."]

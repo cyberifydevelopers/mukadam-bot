@@ -2,11 +2,11 @@ import base64
 import json
 import logging
 
-from fastapi import APIRouter, Depends, Query, Request, Response
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Query, Request, Response
 
+from app import tenancy
 from app.config import settings
-from app.database import get_db
+from app.database import SessionLocal
 from app.pipeline import sync_gmail
 
 logger = logging.getLogger(__name__)
@@ -17,7 +17,6 @@ router = APIRouter(prefix="/webhook/gmail", tags=["gmail"])
 async def receive_gmail_push(
     request: Request,
     token: str = Query(default=""),
-    db: Session = Depends(get_db),
 ):
     """Google Cloud Pub/Sub push endpoint. Gmail's `users.watch()` makes
     Gmail publish to a Pub/Sub topic on every mailbox change; the push
@@ -49,9 +48,11 @@ async def receive_gmail_push(
             payload.get("historyId"),
         )
 
-    created = sync_gmail(db)
-    if created:
-        logger.info("Gmail push triggered sync, queued %d new invoice(s)", created)
+    for user_id in tenancy.user_ids():
+        with tenancy.use(user_id), SessionLocal() as db:
+            created = sync_gmail(db)
+            if created:
+                logger.info("Gmail push triggered sync, queued %d new invoice(s) (user %s)", created, user_id)
 
     # Pub/Sub retries on anything but a 2xx — always ack once we've synced,
     # even if `created` is 0, so it doesn't redeliver a no-op notification.

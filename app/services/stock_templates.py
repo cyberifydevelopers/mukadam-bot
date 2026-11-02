@@ -26,6 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.config import settings
+from app.database import tenant_path
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +169,7 @@ _lock = threading.RLock()
 
 
 def templates_dir() -> Path:
-    return Path(settings.stock_template_dir).resolve()
+    return Path(tenant_path(settings.stock_template_dir)).resolve()
 
 
 def _registry_path() -> Path:

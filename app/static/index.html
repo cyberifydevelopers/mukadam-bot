@@ -474,6 +474,8 @@
     <div class="sidebar-foot" id="foot">
       <div><span class="dot" id="dot-gmail"></span>Gmail <span id="foot-gmail" class="muted"></span></div>
       <div><span class="dot" id="dot-wa"></span>WhatsApp <span id="foot-wa" class="muted"></span></div>
+      <div class="muted ellipsis" id="foot-user" style="margin-top:6px"></div>
+      <div><a href="/auth/logout">Sign out</a></div>
     </div>
   </aside>
   <main id="main"></main>
@@ -492,6 +494,7 @@ async function api(path, opts = {}) {
   const init = { method: opts.method || "GET" };
   if (opts.body !== undefined) { init.body = JSON.stringify(opts.body); init.headers = { "Content-Type": "application/json" }; }
   const res = await fetch("/api" + path, init);
+  if (res.status === 401) { location.href = "/login"; throw new Error("Not signed in"); }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
   return body;
@@ -829,7 +832,6 @@ const views = {
         ${pill(waOk ? "ok" : "bad", `WhatsApp <span class="muted">${wa ? `${esc(wa.status)}${wa.phone ? " · +" + esc(wa.phone) : ""}` : esc(s.whatsapp.provider)}</span>`)}
         ${pill(listening ? "ok" : "warn", listening ? "Instant mail detection" : `Checking every ${Math.round(s.gmail.reconcile_interval_seconds / 60)} min`)}
         ${pill("", `Approvals go to <b>${esc(s.whatsapp.notify_numbers.join(", ") || "not set")}</b>`)}
-        ${s.sheets.url ? `<a class="status-pill" href="${esc(s.sheets.url)}" target="_blank" rel="noopener">Open Google Sheet ↗</a>` : ""}
       </div>
       <div class="stats">
         ${stat("info", I('<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>'), "Emails fetched", o.emails, "with PDF attachments")}
@@ -1213,10 +1215,13 @@ const views = {
         ${tile("Gmail", g.initialized ? "ok" : "warn", g.initialized ? "Connected" : "Not started", `Last sync ${esc(ago(g.last_sync_at))}`)}
         ${tile("WhatsApp", waOk ? "ok" : "bad", waOk ? "Connected" : esc(wa ? wa.status : s.whatsapp.provider), esc(s.whatsapp.provider === "openwa" ? "OpenWA (self-hosted)" : "Meta Cloud API"))}
         ${tile("AI model", s.llm.configured ? "ok" : "bad", s.llm.configured ? "Ready" : "No API key", `<span class="mono">${esc(s.llm.model)}</span>`)}
-        ${tile("Google Sheet", s.sheets.url ? "ok" : "warn", s.sheets.url ? `<a href="${esc(s.sheets.url)}" target="_blank" rel="noopener">Open sheet ↗</a>` : "Not configured", "Where confirmed rows are saved")}
       </div>
       <div class="set-cols">
         <div class="panel"><h2>Gmail</h2><div class="panel-body kv" style="grid-template-columns:repeat(2,1fr)">
+          <div style="grid-column:1/-1"><div class="k">Connected Google account</div>
+            <div class="v">${g.account ? esc(g.account) : `<span class="muted">unknown</span>`}</div>
+            <div class="muted" style="font-size:12px;margin-top:4px">Your own Gmail, your own data. Signing in with a different Gmail opens that person's dashboard instead.</div>
+            ${g.can_sign_in ? `<button style="margin-top:8px" data-action="google-signin">Reconnect Google</button>` : ""}</div>
           ${kv("Watching labels", esc(g.labels))}
           ${kv("Last sync", esc(fmtTime(g.last_sync_at)))}
           ${kv("Push watch expires", esc(fmtTime(g.watch_expires_at)))}
@@ -1532,6 +1537,7 @@ async function refreshSidebar({ warnWhatsApp = false } = {}) {
     setCount($("#count-emails"), o.emails);
     $("#dot-gmail").className = "dot " + (s.gmail.initialized ? "ok" : "warn");
     $("#foot-gmail").textContent = s.gmail.initialized ? "· " + ago(s.gmail.last_sync_at) : "· not started";
+    $("#foot-user").textContent = s.gmail.account || "";
     const wa = s.whatsapp.openwa;
     const waOk = wa ? wa.status === "ready" : s.whatsapp.provider === "meta";
     $("#dot-wa").className = "dot " + (waOk ? "ok" : "bad");
@@ -1666,6 +1672,8 @@ document.addEventListener("click", async (ev) => {
     } else if (btn.dataset.action === "cad-remove") {
       await api(`/cad/${btn.dataset.id}`, { method: "DELETE" });
       toast(`Removed ${btn.dataset.address}`);
+    } else if (btn.dataset.action === "google-signin") {
+      location.href = "/auth/google/start";
     } else if (btn.dataset.action === "sync") {
       const r = await api("/sync", { method: "POST" });
       toast(r.new_invoices_queued ? `${r.new_invoices_queued} new PDF(s) picked up` : "No new emails");

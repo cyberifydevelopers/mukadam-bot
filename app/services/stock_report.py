@@ -29,6 +29,7 @@ from pathlib import Path
 import openpyxl
 
 from app.config import settings
+from app.database import tenant_path
 from app.models import InvoiceRecord
 from app.services import goods_profiles, stock_templates
 from app.services.stock_templates import Template
@@ -481,7 +482,7 @@ def _company_folders(customer: str, template: Template) -> list[str]:
 def _own_report(record_id: int) -> tuple[dict, Path] | None:
     """The newest chain report made for this record: its state and .json path."""
     found = [
-        (s, p) for p in Path(settings.stock_report_dir, "monthly").glob("*/*/*.json")
+        (s, p) for p in Path(tenant_path(settings.stock_report_dir), "monthly").glob("*/*/*.json")
         if (s := _read_state(str(p))) and s.get("record") == record_id and p.with_suffix(".pdf").exists()
     ]
     return max(found, key=lambda sp: sp[0].get("created", "")) if found else None
@@ -501,7 +502,7 @@ def _previous_report(customer: str, template: Template, before: tuple[str, str],
     and .xlsx — if it was made from the same format. A report made from the same document (`record`, read and
     confirmed again) is that document's own earlier try, never what comes before it."""
     states = [(s, p) for name in _company_folders(customer, template)
-              for p in Path(settings.stock_report_dir, "monthly", name).glob("*/*.json")
+              for p in Path(tenant_path(settings.stock_report_dir), "monthly", name).glob("*/*.json")
               if (s := _read_state(str(p))) and _order_key(s) < before and (record is None or s.get("record") != record)]
     if not states:
         return None
@@ -550,9 +551,9 @@ def render(
         dated = datetime.strptime(own[0]["date"], "%d-%m-%Y").replace(tzinfo=PKT)  # no date on the document: it keeps its own
     dated = dated or datetime.now(PKT)
     if monthly_record is None:
-        out_dir = os.path.abspath(os.path.join(settings.stock_report_dir, key))
+        out_dir = os.path.abspath(os.path.join(tenant_path(settings.stock_report_dir), key))
     else:
-        out_dir = os.path.abspath(os.path.join(settings.stock_report_dir, "monthly", _company_folders(customer, template)[0], f"{dated:%Y-%m}"))
+        out_dir = os.path.abspath(os.path.join(tenant_path(settings.stock_report_dir), "monthly", _company_folders(customer, template)[0], f"{dated:%Y-%m}"))
     os.makedirs(out_dir, exist_ok=True)
 
     # LibreOffice's Python must not pick up this app's venv.
@@ -579,7 +580,7 @@ def render(
             job.update(
                 soffice=soffice,
                 # A profile of its own, so it doesn't collide with a LibreOffice window the user has open.
-                profile_url=Path(settings.stock_report_dir, ".libreoffice_profile").resolve().as_uri(),
+                profile_url=Path(tenant_path(settings.stock_report_dir), ".libreoffice_profile").resolve().as_uri(),
                 template=previous[1] if previous and lines else str(path),
                 xlsx_out=base + ".xlsx",
                 pdf_out=base + ".pdf",
@@ -626,7 +627,7 @@ def latest(record: InvoiceRecord) -> StockReport | None:
             xlsx_path=str(xlsx) if xlsx.exists() else "", pdf_path=str(path.with_suffix(".pdf")),
             customer=_customer(order) if order else path.stem, template=state.get("template", ""),
         )
-    out_dir = Path(settings.stock_report_dir, str(record.id))
+    out_dir = Path(tenant_path(settings.stock_report_dir), str(record.id))
     pdfs = sorted(out_dir.glob("*.pdf"), key=lambda p: p.stat().st_mtime, reverse=True) if out_dir.is_dir() else []
     if not pdfs:
         return None

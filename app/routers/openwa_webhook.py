@@ -1,3 +1,4 @@
+import contextvars
 import json
 import logging
 import mimetypes
@@ -9,6 +10,7 @@ from fastapi import APIRouter, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
+from app import runtime_settings, tenancy
 from app.config import settings
 from app.confirmation import (
     Confirmable,
@@ -18,7 +20,7 @@ from app.confirmation import (
     label_of,
     pending_for_number,
 )
-from app.database import SessionLocal
+from app.database import SessionLocal, tenant_path
 from app.models import InvoiceRecord, InvoiceStatus, StatementTransaction, WhatsAppMessage
 from app.services import stock_update, openwa_service, pkr, stock_report
 from app.services.message_log import apply_delivery_status, log_message
@@ -172,7 +174,7 @@ def _record_for_quote(db: Session, quoted_id: str | None) -> InvoiceRecord | Non
 def _handle_figures_request(db: Session, request: openwa_service.FiguresRequest) -> dict:
     """"rate wheat 3800 / drums 120" sent as a reply to a stock report: the figures are stored on that
     document's stock lines and the report is made again with them. Only the approver numbers can send them."""
-    if not request.sender_phone or request.sender_phone not in {_digits(n) for n in settings.notify_numbers_list}:
+    if not request.sender_phone or request.sender_phone not in {_digits(n) for n in runtime_settings.notify_numbers()}:
         return {"status": "ignored"}
     if request.message_id and (
         db.query(WhatsAppMessage.id).filter_by(direction="in", message_id=request.message_id).first()
@@ -225,7 +227,7 @@ def _handle_pkr_request(db: Session, request: openwa_service.PkrRequest) -> dict
     """"usd rate 280" / "pkr amount 1500000", the answer to a USD document's request for its rupee amount: kept on the
     document (as a reply to its message, "#12", or else the newest USD document still without one), and — for a
     delivery order whose stock report exists — the report is made again in rupees. Only the approver numbers."""
-    if not request.sender_phone or request.sender_phone not in {_digits(n) for n in settings.notify_numbers_list}:
+    if not request.sender_phone or request.sender_phone not in {_digits(n) for n in runtime_settings.notify_numbers()}:
         return {"status": "ignored"}
     if request.message_id and (
         db.query(WhatsAppMessage.id).filter_by(direction="in", message_id=request.message_id).first()
@@ -271,7 +273,7 @@ def _handle_pdf_request(db: Session, request: openwa_service.PdfRequest) -> dict
     """"Share pdf for 496" / "send report 496": sends the stock report made for that item back to the person
     asking, as its PDF and its Excel — "original pdf 496" sends the document as it arrived instead. Only the approver numbers (NOTIFY_WHATSAPP_NUMBERS) can
     ask — these are bank documents — and anyone else is ignored silently."""
-    if not request.sender_phone or request.sender_phone not in {_digits(n) for n in settings.notify_numbers_list}:
+    if not request.sender_phone or request.sender_phone not in {_digits(n) for n in runtime_settings.notify_numbers()}:
         return {"status": "ignored"}
     if request.message_id and (
         db.query(WhatsAppMessage.id).filter_by(direction="in", message_id=request.message_id).first()
@@ -303,7 +305,7 @@ def _handle_pdf_request(db: Session, request: openwa_service.PdfRequest) -> dict
         return {"status": "ok"}
 
     if request.original:
-        path = os.path.join(settings.pdf_storage_dir, record.pdf_filename)
+        path = os.path.join(tenant_path(settings.pdf_storage_dir), record.pdf_filename)
         if not os.path.exists(path):
             _send_logged(db, request.sender_phone, f"The file for #{record.id} is no longer on the server.", record)
             db.commit()
@@ -362,7 +364,8 @@ def _handle_pdf_request(db: Session, request: openwa_service.PdfRequest) -> dict
 
 
 def _spawn(fn, *args) -> None:
-    threading.Thread(target=fn, args=args, daemon=True).start()
+    # Runs for the same user as the message that started it.
+    threading.Thread(target=contextvars.copy_context().run, args=(fn, *args), daemon=True).start()
 
 
 def _reply_to_question(to_number: str, text: str, record_id: int | None) -> None:
@@ -386,7 +389,7 @@ def _reply_to_question(to_number: str, text: str, record_id: int | None) -> None
 def _handle_question(db: Session, question: openwa_service.Question) -> dict:
     """A question about the reports ("what is margin", "which factory is this from"), as a reply to a stock report
     or on its own. Only the approver numbers can ask — these are bank documents."""
-    if not question.sender_phone or question.sender_phone not in {_digits(n) for n in settings.notify_numbers_list}:
+    if not question.sender_phone or question.sender_phone not in {_digits(n) for n in runtime_settings.notify_numbers()}:
         return {"status": "ignored"}
     if question.message_id and (
         db.query(WhatsAppMessage.id).filter_by(direction="in", message_id=question.message_id).first()
@@ -439,9 +442,25 @@ async def receive_webhook(request: Request, token: str = Query(default="")):
     return await run_in_threadpool(_handle, json.loads(raw_body))
 
 
+def _users_for(payload: dict) -> list[int | None]:
+    """Whose message this is. One WhatsApp number serves every user, so the sender's number says which user's
+    approver is answering; a delivery receipt or reaction names no sender, so every user is looked through."""
+    if payload.get("event") in ("message.ack", "message.reaction"):
+        return tenancy.user_ids()
+    owners = runtime_settings.all_notify_numbers()
+    phone = openwa_service._sender_phone(payload.get("data") or {})
+    return [owners[phone]] if phone in owners else []
+
+
 def _handle(payload: dict) -> dict:
-    with _HANDLE_LOCK, SessionLocal() as db:
-        return _handle_payload(db, payload)
+    with _HANDLE_LOCK:
+        result = {"status": "ignored"}
+        for user_id in _users_for(payload):
+            with tenancy.use(user_id), SessionLocal() as db:
+                result = _handle_payload(db, payload)
+            if payload.get("event") != "message.ack" and result.get("status") != "ignored":
+                break
+        return result
 
 
 def _handle_payload(db: Session, payload: dict) -> dict:
@@ -503,7 +522,7 @@ def _handle_payload(db: Session, payload: dict) -> dict:
     )
 
     if target is None:
-        if message and reply.sender_phone in {_digits(n) for n in settings.notify_numbers_list}:
+        if message and reply.sender_phone in {_digits(n) for n in runtime_settings.notify_numbers()}:
             _send_logged(db, reply.sender_phone, message, None)
         db.commit()
         return {"status": "ok"}

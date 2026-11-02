@@ -3,6 +3,7 @@ from datetime import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
+from app import tenancy
 from app.config import settings
 from app.database import SessionLocal
 from app.models import GmailSyncState
@@ -18,34 +19,38 @@ def _reconcile_job() -> None:
     """Periodic check of Gmail from our own cursor. The main way mail arrives when Pub/Sub isn't running, and the
     safety net when it is: a missed notification must never mean mail waits for the dashboard button. It shares
     sync_gmail()'s lock and skips mail already seen, so it can't process anything twice."""
-    db = SessionLocal()
-    try:
-        created = sync_gmail(db)
-        if created:
-            logger.info("Reconciliation sync queued %d new invoice(s)", created)
-    except Exception:
-        logger.exception("Reconciliation sync failed")
-    finally:
-        db.close()
+    for user_id in tenancy.user_ids():
+        with tenancy.use(user_id):
+            db = SessionLocal()
+            try:
+                created = sync_gmail(db)
+                if created:
+                    logger.info("Reconciliation sync queued %d new invoice(s) (user %s)", created, user_id)
+            except Exception:
+                logger.exception("Reconciliation sync failed (user %s)", user_id)
+            finally:
+                db.close()
 
 
 def _renew_watch_job() -> None:
     """Gmail caps a watch() at ~7 days; renewing well before that keeps push
     notifications flowing without a gap."""
-    db = SessionLocal()
-    try:
-        history_id, expiration_ms = gmail_service.start_watch()
-        state = db.get(GmailSyncState, 1)
-        if state is None:
-            state = GmailSyncState(id=1, last_history_id=history_id)
-            db.add(state)
-        state.watch_expiration_ms = expiration_ms
-        db.commit()
-        logger.info("Renewed Gmail watch, expires at epoch ms %s", expiration_ms)
-    except Exception:
-        logger.exception("Gmail watch renewal failed")
-    finally:
-        db.close()
+    for user_id in tenancy.user_ids():
+        with tenancy.use(user_id):
+            db = SessionLocal()
+            try:
+                history_id, expiration_ms = gmail_service.start_watch()
+                state = db.get(GmailSyncState, 1)
+                if state is None:
+                    state = GmailSyncState(id=1, last_history_id=history_id)
+                    db.add(state)
+                state.watch_expiration_ms = expiration_ms
+                db.commit()
+                logger.info("Renewed Gmail watch (user %s), expires at epoch ms %s", user_id, expiration_ms)
+            except Exception:
+                logger.exception("Gmail watch renewal failed (user %s)", user_id)
+            finally:
+                db.close()
 
 
 def poll_interval(pubsub_active: bool) -> int:

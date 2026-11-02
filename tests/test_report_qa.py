@@ -195,6 +195,9 @@ class Webhook(Database):
         approvers = mock.patch.object(openwa_webhook, "settings", mock.Mock(notify_numbers_list=[APPROVER]))
         approvers.start()
         self.addCleanup(approvers.stop)
+        numbers = mock.patch.object(openwa_webhook.runtime_settings, "notify_numbers", return_value=[APPROVER])
+        numbers.start()
+        self.addCleanup(numbers.stop)
 
     def handle(self, body, **kw):
         result = openwa_webhook._handle_payload(self.db, payload(body, **kw))

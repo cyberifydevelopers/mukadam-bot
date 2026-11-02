@@ -15,6 +15,7 @@ from html.parser import HTMLParser
 import httpx
 
 from app.config import settings
+from app.database import tenant_path
 from app.services.google_auth import GOOGLE_API_RETRIES, gmail_client
 
 logger = logging.getLogger(__name__)
@@ -224,7 +225,7 @@ def fetch_email(message_id: str) -> FetchedEmail:
     subject = _header(headers, "Subject")
     received_at = datetime.utcfromtimestamp(int(message["internalDate"]) / 1000)
 
-    os.makedirs(settings.pdf_storage_dir, exist_ok=True)
+    os.makedirs(tenant_path(settings.pdf_storage_dir), exist_ok=True)
     attachment_paths: list[str] = []
     plain_parts: list[str] = []
     html_parts: list[str] = []
@@ -245,7 +246,7 @@ def fetch_email(message_id: str) -> FetchedEmail:
                 if data:
                     base = os.path.splitext(filename)[0] or "inline"
                     safe_name = f"{message_id}_img{len(image_paths) + 1}_{base}{IMAGE_TYPES[mime]}"
-                    path = os.path.join(settings.pdf_storage_dir, safe_name.replace("/", "_").replace("\\", "_"))
+                    path = os.path.join(tenant_path(settings.pdf_storage_dir), safe_name.replace("/", "_").replace("\\", "_"))
                     with open(path, "wb") as f:
                         f.write(_decode(data))
                     image_paths.append(path)
@@ -264,7 +265,7 @@ def fetch_email(message_id: str) -> FetchedEmail:
             continue
 
         safe_name = f"{message_id}_{filename}".replace("/", "_").replace("\\", "_")
-        path = os.path.join(settings.pdf_storage_dir, safe_name)
+        path = os.path.join(tenant_path(settings.pdf_storage_dir), safe_name)
         with open(path, "wb") as f:
             f.write(_decode(data))
         attachment_paths.append(path)
@@ -312,7 +313,7 @@ def _download_linked_images(message_id: str, html: str, already: int) -> list[st
         if not _MIN_IMAGE_BYTES <= len(data) <= _MAX_IMAGE_BYTES:
             continue
         path = os.path.join(
-            settings.pdf_storage_dir, f"{message_id}_img{already + len(paths) + 1}_linked{IMAGE_TYPES[mime]}"
+            tenant_path(settings.pdf_storage_dir), f"{message_id}_img{already + len(paths) + 1}_linked{IMAGE_TYPES[mime]}"
         )
         with open(path, "wb") as f:
             f.write(data)
@@ -365,7 +366,7 @@ def save_body_document(email: FetchedEmail) -> str:
     attachments, for an email that carries its content in the body instead
     of an attachment — e.g. a bank officer's delivery instruction forwarded
     on to us. Returns the path."""
-    path = os.path.join(settings.pdf_storage_dir, f"{email.message_id}_{BODY_FILENAME}")
+    path = os.path.join(tenant_path(settings.pdf_storage_dir), f"{email.message_id}_{BODY_FILENAME}")
     with open(path, "w", encoding="utf-8") as f:
         f.write(
             f"From: {email.sender}\n"

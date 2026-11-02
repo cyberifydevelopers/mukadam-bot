@@ -33,6 +33,7 @@ from langgraph.graph import END, START, StateGraph
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.database import tenant_path
 from app.models import InvoiceRecord, InvoiceStatus, ProcessedEmail
 from app.pipeline import create_record, extract_document, send_prompt, set_stage
 from app.services import stock_update
@@ -84,7 +85,7 @@ def read_documents(state: InvoiceState, config: RunnableConfig) -> InvoiceState:
 
 
 def _discard(db: Session, record: InvoiceRecord) -> None:
-    path = os.path.join(settings.pdf_storage_dir, record.pdf_filename)
+    path = os.path.join(tenant_path(settings.pdf_storage_dir), record.pdf_filename)
     email = record.email
     db.flush()  # a record made in this run isn't in the database yet, and only a stored one can be deleted
     db.delete(record)

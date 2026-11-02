@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
 from app.config import settings
+from app.database import tenant_path
 from app.services import stock_report
 
 logger = logging.getLogger(__name__)
@@ -26,7 +27,7 @@ _TRAILING_DATE = re.compile(r"\s+\d\d-\d\d-\d\d(\s+\(\d+\))?$")
 
 
 def _root() -> Path:
-    return Path(settings.stock_report_dir, "monthly")
+    return Path(tenant_path(settings.stock_report_dir), "monthly")
 
 
 def _date_key(date: str) -> str:

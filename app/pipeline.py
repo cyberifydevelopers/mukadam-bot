@@ -19,7 +19,9 @@ from googleapiclient.errors import HttpError
 from sqlalchemy.orm import Session, object_session
 
 from app.bank_registry import BANK_EMAIL_DOMAINS, BANK_REGISTRY, BankProfile, bank_identity, profile_by_code
+from app import runtime_settings
 from app.config import settings
+from app.database import tenant_path
 from app.formatting import amount_line, enclosed_documents, format_items
 from app.services import pkr
 from app.services import stock_update
@@ -326,7 +328,7 @@ def extract_document(db: Session, record: InvoiceRecord, doc: Document | None = 
     - An email with no attachment (its body saved as a document) goes to the
       LLM too, judged by who wrote the original message of the forward chain.
     """
-    doc = doc or read_document(os.path.join(settings.pdf_storage_dir, record.pdf_filename))
+    doc = doc or read_document(os.path.join(tenant_path(settings.pdf_storage_dir), record.pdf_filename))
     if doc.kind == "unreadable":
         _mark_failed(record, doc.path, PdfExtractionError(doc.error or "unreadable file"))
         return "failed"
@@ -697,7 +699,7 @@ def _deliver(
         return
     is_txn = isinstance(target, StatementTransaction)
     label = target.label if is_txn else f"invoice {target.id}"
-    recipients = settings.notify_numbers_list
+    recipients = runtime_settings.notify_numbers()
     provider = settings.whatsapp_provider
     to_number = recipients[0] if recipients else None
     message_id = error = None

@@ -25,6 +25,17 @@ class InvoiceStatus(str, enum.Enum):
     MERGED = "MERGED"
 
 
+class User(Base):
+    """A person who signed in with Google. Their emails, invoices, settings and files are in their own database
+    and folders (app/database.py); this table, in the first database, only lists who they are."""
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class GmailSyncState(Base):
     """Singleton row (id=1) holding the Gmail History API cursor and the
     current watch()'s expiration, so the bot resumes from the right place

@@ -10,13 +10,14 @@ import hmac
 import os
 
 from app.config import settings
+from app.database import FIRST_USER, current_user
 
 
 def _secret() -> bytes:
     return (settings.file_link_secret or settings.openwa_webhook_secret).encode()
 
 
-def _base_url() -> str:
+def base_url() -> str:
     if settings.public_base_url:
         return settings.public_base_url.rstrip("/")
     # Railway sets this to the service's public domain.
@@ -27,17 +28,20 @@ def _base_url() -> str:
     return "" if os.environ.get("RAILWAY_ENVIRONMENT") else "http://localhost:8000"
 
 
-def _token(invoice_id: int) -> str:
-    return hmac.new(_secret(), f"view-file:{invoice_id}".encode(), hashlib.sha256).hexdigest()[:32]
+def _token(invoice_id: int, user_id: int | None = None) -> str:
+    # Links made before there were users have no user in them (and open the first user's file).
+    scope = f"view-file:{invoice_id}" if user_id is None else f"view-file:{user_id}:{invoice_id}"
+    return hmac.new(_secret(), scope.encode(), hashlib.sha256).hexdigest()[:32]
 
 
-def is_valid(invoice_id: int, token: str) -> bool:
-    return bool(_secret()) and hmac.compare_digest(_token(invoice_id), token or "")
+def is_valid(invoice_id: int, token: str, user_id: int | None = None) -> bool:
+    return bool(_secret()) and hmac.compare_digest(_token(invoice_id, user_id), token or "")
 
 
 def url_for(invoice_id: int) -> str | None:
     """None when the app has no address to give (on Railway without a domain) or no secret to sign with."""
-    base = _base_url()
+    base = base_url()
     if not base or not _secret():
         return None
-    return f"{base}/view/{invoice_id}?t={_token(invoice_id)}"
+    user_id = current_user.get() or FIRST_USER
+    return f"{base}/view/{user_id}/{invoice_id}?t={_token(invoice_id, user_id)}"

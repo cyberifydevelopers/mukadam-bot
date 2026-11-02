@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     # Google OAuth (Gmail + Sheets share one token — see scripts/gmail_oauth_setup.py)
     google_client_secrets_file: str = "./credentials/client_secret.json"
     google_token_file: str = "./credentials/token.json"
+    # Full contents of the OAuth client json, for hosts with no file upload. Needed for "Continue with Google" on
+    # the dashboard; on a host it must be a "Web application" client with <app address>/auth/google/callback as a
+    # redirect URI.
+    google_client_secrets_json: str = ""
+    # Who may sign in, comma-separated Gmail addresses. Empty = any Google account (while the OAuth app is in
+    # "Testing" mode only its test users can anyway).
+    allowed_emails: str = ""
+    # Signs the sign-in cookie. Empty = derived from the OAuth client secret.
+    session_secret: str = ""
     # Full contents of token.json, for hosts with no file upload (Railway):
     # written to google_token_file when that file doesn't exist yet.
     google_token_json: str = ""

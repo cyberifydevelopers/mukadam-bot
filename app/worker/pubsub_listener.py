@@ -26,6 +26,7 @@ from datetime import datetime
 
 from googleapiclient.errors import HttpError
 
+from app import tenancy
 from app.config import settings
 from app.database import SessionLocal
 from app.pipeline import sync_gmail
@@ -121,19 +122,24 @@ def _run() -> None:
             ).execute(num_retries=GOOGLE_API_RETRIES)
         except Exception as exc:
             logger.warning("Couldn't extend Pub/Sub ack deadline (a redelivery may trigger one extra sync): %s", exc)
-        db = SessionLocal()
-        try:
-            created = sync_gmail(db, notification=(published_at, received_at))
-            if created:
-                logger.info("Pub/Sub-triggered sync queued %d new item(s)", created)
-        except Exception:
-            # Not acknowledged → Pub/Sub redelivers after the ack deadline and
-            # the sync is retried then.
-            logger.exception("Sync after Pub/Sub notification failed; will retry on redelivery")
-            db.rollback()
+        # One subscription serves every user's mailbox: sync each (a user with no new mail costs one cheap call).
+        failed = False
+        for user_id in tenancy.user_ids():
+            with tenancy.use(user_id):
+                db = SessionLocal()
+                try:
+                    created = sync_gmail(db, notification=(published_at, received_at))
+                    if created:
+                        logger.info("Pub/Sub-triggered sync queued %d new item(s) (user %s)", created, user_id)
+                except Exception:
+                    logger.exception("Sync after Pub/Sub notification failed (user %s)", user_id)
+                    db.rollback()
+                    failed = True
+                finally:
+                    db.close()
+        if failed:
+            # Not acknowledged → Pub/Sub redelivers after the ack deadline and the sync is retried then.
             continue
-        finally:
-            db.close()
 
         try:
             service.projects().subscriptions().acknowledge(
@@ -146,6 +152,8 @@ def _run() -> None:
 
 def start() -> None:
     global _thread
+    if _thread is not None and _thread.is_alive():
+        return
     if not settings.google_pubsub_subscription:
         _set("disabled", "GOOGLE_PUBSUB_SUBSCRIPTION not set — relying on the periodic check")
         logger.info("Pub/Sub listener off: GOOGLE_PUBSUB_SUBSCRIPTION not set")

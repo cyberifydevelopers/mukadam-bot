@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from app import runtime_settings
 from app.bank_registry import BANK_REGISTRY, profile_by_code
 from app.config import settings
-from app.database import get_db
+from app.database import get_db, tenant_path
 from app.email_view import render_email_html
 from app.models import (
     GmailSyncState,
@@ -34,6 +34,7 @@ from app.models import (
 )
 from app.parsers.statement_rows import parse_statement
 from app.pipeline import reparse_invoice, resend_confirmation, retry_email, sync_gmail
+from app.routers import google_login
 from app.services import goods_profiles, openwa_service, pkr, stock_report
 from app.services.document_reader import read_document
 from app.services.pdf_extractor import PdfExtractionError
@@ -127,7 +128,7 @@ def _get_invoice(db: Session, invoice_id: int) -> InvoiceRecord:
 
 
 def _pdf_path(record: InvoiceRecord) -> str:
-    return os.path.join(settings.pdf_storage_dir, record.pdf_filename)
+    return os.path.join(tenant_path(settings.pdf_storage_dir), record.pdf_filename)
 
 
 @router.get("/overview")
@@ -163,6 +164,8 @@ def status(db: Session = Depends(get_db)):
     return {
         "gmail": {
             "initialized": state is not None,
+            "account": google_login.connected_email(),
+            "can_sign_in": google_login.is_available(),
             "last_history_id": state.last_history_id if state else None,
             "last_sync_at": _iso(state.updated_at) if state else None,
             "watch_expires_at": (
@@ -176,18 +179,10 @@ def status(db: Session = Depends(get_db)):
         },
         "whatsapp": {
             "provider": settings.whatsapp_provider,
-            "notify_numbers": settings.notify_numbers_list,
+            "notify_numbers": runtime_settings.notify_numbers(),
             "notify_numbers_source": runtime_settings.notify_numbers_source(db),
             "openwa": openwa_service.session_status() if settings.whatsapp_provider == "openwa" else None,
             "openwa_url": settings.openwa_url if settings.whatsapp_provider == "openwa" else None,
-        },
-        "sheets": {
-            "configured": bool(settings.google_sheets_spreadsheet_id),
-            "url": (
-                f"https://docs.google.com/spreadsheets/d/{settings.google_sheets_spreadsheet_id}/edit"
-                if settings.google_sheets_spreadsheet_id
-                else None
-            ),
         },
         "llm": {"model": settings.llm_extraction_model, "configured": bool(settings.openrouter_api_key)},
         "banks": [
@@ -597,7 +592,7 @@ def clear_data(body: ClearRequest, db: Session = Depends(get_db)):
         _remove_file(path)
     leftovers = 0
     if body.scope == "everything":
-        leftovers = _empty_folder(settings.pdf_storage_dir) + _empty_folder(settings.stock_report_dir, keep=("monthly",))  # the Stock Reports tab's history stays
+        leftovers = _empty_folder(tenant_path(settings.pdf_storage_dir)) + _empty_folder(tenant_path(settings.stock_report_dir), keep=("monthly",))  # the Stock Reports tab's history stays
     logger.warning("Dashboard clear (%s): %d files, %d emails, %d messages, %d other files", body.scope, len(paths), emails, messages, leftovers)
     return {"scope": body.scope, "invoices": len(paths), "emails": emails, "messages": messages}
 

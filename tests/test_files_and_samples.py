@@ -55,6 +55,7 @@ class FileRequestHandling(Database):
         super().setUp()
         for patcher in (
             mock.patch.object(openwa_webhook, "settings", mock.Mock(notify_numbers_list=[APPROVER], pdf_storage_dir="Z:/none")),
+            mock.patch.object(openwa_webhook.runtime_settings, "notify_numbers", return_value=[APPROVER]),
             mock.patch.object(openwa_service, "send_text", return_value="t1"),
         ):
             patcher.start()
