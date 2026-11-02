@@ -1295,16 +1295,20 @@ function audio() {
 function playChime(urgent) {
   const ctx = !sound.muted && audio();
   if (!ctx || ctx.state !== "running") return;
-  (urgent ? [660, 520] : [880, 1175]).forEach((freq, i) => {
-    const t = ctx.currentTime + i * 0.16, osc = ctx.createOscillator(), gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start(t);
-    osc.stop(t + 0.4);
+  // Soft, bell-like notes (a quiet sine plus a faint overtone) with a gentle attack and a long, smooth fade.
+  (urgent ? [587, 466] : [784, 1047]).forEach((freq, i) => {
+    const t = ctx.currentTime + i * 0.14;
+    [[freq, 0.07], [freq * 2, 0.015]].forEach(([f, peak]) => {
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = f;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(peak, t + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.95);
+    });
   });
 }
 
