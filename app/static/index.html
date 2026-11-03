@@ -509,9 +509,13 @@ function toast(msg, ms = 3000, kind = "") {
 
 async function deleteAccount() {
   const email = $("#foot-user").textContent.trim();
-  if (!confirm("Delete your account? All your invoices, settings, reports and files are removed from the server and your Gmail is disconnected. This cannot be undone.")) return;
-  const typed = (prompt(`Type your email${email ? ` (${email})` : ""} to confirm`) || "").trim().toLowerCase();
-  if (!typed || (email && typed !== email.toLowerCase())) { toast("The email didn't match. Nothing was deleted.", 4000); return; }
+  const sure = await askDialog({
+    title: "Delete your account?",
+    body: `<p>Your invoices, settings, reports and files are removed from the server and your Gmail is disconnected.</p><p><b>This cannot be undone.</b></p>`,
+    confirmLabel: "Delete account",
+    typeWord: email || "DELETE",
+  });
+  if (!sure) return;
   try {
     await api("/me", { method: "DELETE" });
     location.href = "/login";
