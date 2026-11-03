@@ -475,7 +475,7 @@
       <div><span class="dot" id="dot-gmail"></span>Gmail <span id="foot-gmail" class="muted"></span></div>
       <div><span class="dot" id="dot-wa"></span>WhatsApp <span id="foot-wa" class="muted"></span></div>
       <div class="muted ellipsis" id="foot-user" style="margin-top:6px"></div>
-      <div><a href="/auth/logout">Sign out</a></div>
+      <div><a href="/auth/logout">Sign out</a> · <a href="#" id="delete-account" onclick="deleteAccount(); return false;">Delete account</a></div>
     </div>
   </aside>
   <main id="main"></main>
@@ -505,6 +505,17 @@ function toast(msg, ms = 3000, kind = "") {
   t.innerHTML = `<span class="toast-msg">${esc(msg)}</span><button type="button" class="toast-x" aria-label="Dismiss" onclick="this.parentNode.classList.remove('show')">✕</button>`;
   t.className = "toast show " + kind;
   clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), ms);
+}
+
+async function deleteAccount() {
+  const email = $("#foot-user").textContent.trim();
+  if (!confirm("Delete your account? All your invoices, settings, reports and files are removed from the server and your Gmail is disconnected. This cannot be undone.")) return;
+  const typed = (prompt(`Type your email${email ? ` (${email})` : ""} to confirm`) || "").trim().toLowerCase();
+  if (!typed || (email && typed !== email.toLowerCase())) { toast("The email didn't match. Nothing was deleted.", 4000); return; }
+  try {
+    await api("/me", { method: "DELETE" });
+    location.href = "/login";
+  } catch (e) { toast(e.message, 5000); }
 }
 
 const fmtTime = (iso) => iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "—";

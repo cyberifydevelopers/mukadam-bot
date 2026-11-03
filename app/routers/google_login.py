@@ -16,6 +16,7 @@ import secrets
 import time
 from html import escape
 
+import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from google.oauth2.credentials import Credentials
@@ -25,7 +26,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app import tenancy
 from app.config import settings
-from app.database import FIRST_USER, SessionLocal, current_user
+from app.database import FIRST_USER, SessionLocal, _main_factory, current_user, delete_tenant
 from app.models import GmailSyncState, User
 from app.pipeline import _SYNC_LOCK, _get_or_init_sync_state
 from app.services import google_auth
@@ -126,6 +127,10 @@ class SignedInMiddleware:
         if scope["type"] != "http" or scope["path"].startswith(PUBLIC_PREFIXES):
             return await self.app(scope, receive, send)
         user_id = _user_from_cookie(_cookie_from_scope(scope))
+        if user_id is not None:
+            with _main_factory() as db:  # a deleted account's cookie must stop working, on any device
+                if db.get(User, user_id) is None:
+                    user_id = None
         if user_id is None:
             if scope["path"].startswith(("/api/", "/invoices")):
                 response = JSONResponse({"detail": "Not signed in"}, status_code=401)
@@ -153,6 +158,40 @@ def connected_email() -> str | None:
 @router.get("/api/me")
 def me():
     return {"email": connected_email()}
+
+
+def _disconnect_google() -> None:
+    """Stops the Gmail push and revokes the login, so Google no longer lists the app. Best effort: the account is
+    deleted either way."""
+    try:
+        google_auth.gmail_client().users().stop(userId="me").execute(num_retries=google_auth.GOOGLE_API_RETRIES)
+    except Exception:
+        logger.warning("Could not stop the Gmail watch while deleting an account", exc_info=True)
+    try:
+        refresh_token = (json.loads(google_auth._stored_token() or "{}")).get("refresh_token")
+        if refresh_token:
+            httpx.post("https://oauth2.googleapis.com/revoke", data={"token": refresh_token}, timeout=10)
+    except Exception:
+        logger.warning("Could not revoke the Google login while deleting an account", exc_info=True)
+
+
+@router.delete("/api/me")
+def delete_me():
+    """Deletes the signed-in user: their sign-in, database and files. The first user's is the server's own data
+    and stays."""
+    user_id = current_user.get()
+    if user_id in (None, FIRST_USER):
+        return JSONResponse({"detail": "This is the main account of the server and can't be deleted here."}, status_code=400)
+    email = connected_email()
+    _disconnect_google()
+    with tenancy.use(None), SessionLocal() as db:  # first out of the users list, so no background job picks them up again
+        db.query(User).filter_by(id=user_id).delete()
+        db.commit()
+    delete_tenant(user_id)
+    logger.info("User %s (id %s) deleted their account", email, user_id)
+    response = JSONResponse({"status": "deleted"})
+    response.delete_cookie(COOKIE)
+    return response
 
 
 # ---------- sign-in ----------

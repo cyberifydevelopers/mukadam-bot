@@ -158,6 +158,7 @@ def follow_ups(db: Session, record: InvoiceRecord, extra: dict) -> dict | None:
 
 def announce_all(db: Session, record: InvoiceRecord, extra: dict) -> None:
     """Sends the approver what follow_ups() did: each updated stock report, and what was kept for which factory."""
+    db.flush()  # a letter just read has no number until now ("New letter (#None)")
     for item in extra.get("merges") or []:
         old = db.get(InvoiceRecord, item["into"])
         try:

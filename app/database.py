@@ -1,4 +1,5 @@
 import os
+import shutil
 import threading
 from contextvars import ContextVar
 
@@ -48,6 +49,18 @@ def _factory_for(user_id: int | None) -> sessionmaker:
             _add_missing_columns(own)
             _factories[user_id] = sessionmaker(autocommit=False, autoflush=False, bind=own)
         return _factories[user_id]
+
+
+def delete_tenant(user_id: int) -> None:
+    """Closes and removes everything kept apart for `user_id`: their database and their folders. Never the first
+    user's, which is the server's own data."""
+    if user_id in (None, FIRST_USER):
+        raise ValueError("The first user's data can't be deleted")
+    with _factories_lock:
+        factory = _factories.pop(user_id, None)
+    if factory is not None:
+        factory.kw["bind"].dispose()
+    shutil.rmtree(os.path.join(os.path.dirname(os.path.normpath(engine.url.database)), "tenants", str(user_id)), ignore_errors=True)
 
 
 _main_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
