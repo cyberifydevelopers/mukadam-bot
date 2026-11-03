@@ -682,7 +682,7 @@ function chat(messages) {
 
 // True while any email is mid-processing: the page then refreshes every 3 s.
 let processingActive = false;
-const ACTIVE_STAGES = ["reading", "analyzing", "sending"];
+const ACTIVE_STAGES = ["queued", "reading", "analyzing", "sending"];
 
 // One step of the progress bar: state is done / active / failed / skip / todo.
 const step = (state, label, title = "") =>
@@ -694,6 +694,7 @@ function progressSteps(e) {
   // Finished, but its extracted files were deleted from the dashboard since.
   if ((s === "done" || s === "legacy") && !e.documents.length) return [...steps, step("skip", "File deleted")];
   if (s === "no_attachment") return [...steps, step("skip", "Skipped — no attachment", e.stage_detail)];
+  if (s === "queued") return [...steps, step("active", "Waiting to be read…", e.stage_detail), step("todo", "Bank document?"), step("todo", "WhatsApp"), step("todo", "Reply")];
   if (s === "reading") return [...steps, step("active", "Opening file…"), step("todo", "Bank document?"), step("todo", "WhatsApp"), step("todo", "Reply")];
   steps.push(step("done", "File read", e.attachments.join(", ")));
 

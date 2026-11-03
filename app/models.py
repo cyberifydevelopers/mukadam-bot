@@ -122,7 +122,7 @@ class ProcessedEmail(Base):
 
     # Live processing progress, committed as each step starts so the
     # dashboard can show it while the email is still being handled:
-    # reading → classifying → extracting → done, or no_attachment /
+    # queued → reading → classifying → extracting → done, or no_attachment /
     # not_bank / failed.
     stage: Mapped[str] = mapped_column(String(16), nullable=True)
     stage_detail: Mapped[str] = mapped_column(Text, nullable=True)

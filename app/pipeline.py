@@ -19,9 +19,9 @@ from googleapiclient.errors import HttpError
 from sqlalchemy.orm import Session, object_session
 
 from app.bank_registry import BANK_EMAIL_DOMAINS, BANK_REGISTRY, BankProfile, bank_identity, profile_by_code
-from app import runtime_settings
+from app import runtime_settings, tenancy
 from app.config import settings
-from app.database import tenant_path
+from app.database import SessionLocal, tenant_path
 from app.formatting import amount_line, enclosed_documents, format_items
 from app.services import pkr
 from app.services import stock_update
@@ -47,6 +47,13 @@ _DEFAULT_LLM_PARSER = LlmInvoiceParser()
 # message and process it twice.
 _SYNC_LOCK = threading.Lock()
 
+# Reading a document (LLM, about a minute) must not hold up the next notification: a sync only registers the new
+# mail (a "queued" row the dashboard shows at once) and a per-user worker reads the queued mails one by one.
+# One document is read at a time across users, as before the split (LibreOffice, shared report files).
+_PROCESS_LOCK = threading.Lock()
+_WORKERS_LOCK = threading.Lock()
+_workers: dict[int | None, threading.Thread] = {}
+
 
 def _pdf_password_for(profile: BankProfile) -> str | None:
     if not profile.pdf_password_env:
@@ -66,14 +73,67 @@ def _get_or_init_sync_state(db: Session) -> GmailSyncState:
 
 
 def sync_gmail(db: Session, notification: tuple[datetime, datetime] | None = None) -> int:
-    """Pulls everything new since the last known Gmail historyId and runs
-    each email through the invoice graph. Triggered by the Pub/Sub listener
-    on every new-mail notification (or the fallback poll / dashboard
-    button); works from its own stored cursor, so a missed or duplicated
-    notification never skips or double-processes mail.
+    """Pulls everything new since the last known Gmail historyId and registers
+    each email (stage "queued", visible on the dashboard at once); a
+    background worker then runs them through the invoice graph. Triggered by
+    the Pub/Sub listener on every new-mail notification (or the fallback poll
+    / dashboard button); works from its own stored cursor, so a missed or
+    duplicated notification never skips or double-processes mail. Returns
+    how many emails were queued for reading.
     """
     with _SYNC_LOCK:
-        return _sync_gmail_locked(db, notification)
+        queued = _sync_gmail_locked(db, notification)
+    # Also on a sync that found nothing: it picks up mail left "queued" by a restart.
+    _start_worker()
+    return queued
+
+
+def _start_worker() -> None:
+    user_id = tenancy.current_id()
+    with _WORKERS_LOCK:
+        worker = _workers.get(user_id)
+        if worker is not None and worker.is_alive():
+            return
+        worker = threading.Thread(target=_read_queued, args=(user_id,), name=f"gmail-reader-{user_id}", daemon=True)
+        _workers[user_id] = worker
+        worker.start()
+
+
+def _next_queued_id(db: Session) -> int | None:
+    db.rollback()  # end the open transaction so a mail queued a moment ago is seen
+    row = db.query(ProcessedEmail.id).filter(ProcessedEmail.stage == "queued").order_by(ProcessedEmail.id).first()
+    return row[0] if row else None
+
+
+def _read_queued(user_id: int | None) -> None:
+    with tenancy.use(user_id):
+        while True:
+            with SessionLocal() as db:
+                email_id = _next_queued_id(db)
+                if email_id is None:
+                    # Leave under the same lock _start_worker() checks us under, so a mail queued right now
+                    # either is seen here or starts a new worker.
+                    with _WORKERS_LOCK:
+                        if _next_queued_id(db) is None:
+                            _workers.pop(user_id, None)
+                            return
+                    continue
+                with _PROCESS_LOCK:
+                    _read_one_queued(db, email_id)
+
+
+def _read_one_queued(db: Session, email_id: int) -> None:
+    email = db.get(ProcessedEmail, email_id)
+    try:
+        names = ", ".join(json.loads(email.attachment_names or "[]"))
+        set_stage(db, email, "reading", f"Opening {names}" if names else "Opening the email")
+        fetched = gmail_service.fetch_email(email.message_id)
+        _run_graph(db, email, fetched)
+    except Exception as exc:
+        # One bad email must not stop the others; it is marked failed, with the reason, for a retry from the dashboard.
+        logger.exception("Reading queued email %s failed", email_id)
+        db.rollback()
+        set_stage(db, db.get(ProcessedEmail, email_id), "failed", f"{type(exc).__name__}: {exc}")
 
 
 def _sync_gmail_locked(db: Session, notification: tuple[datetime, datetime] | None) -> int:
@@ -102,7 +162,7 @@ def _sync_gmail_locked(db: Session, notification: tuple[datetime, datetime] | No
     for message_id in message_ids:
         if message_id in already_seen:
             continue
-        created_count += _process_one_message(db, message_id, notification)
+        created_count += _register_message(db, message_id, notification)
 
     state.last_history_id = new_history_id
     db.commit()
@@ -207,8 +267,11 @@ def _sender_not_allowed(db: Session, fetched: gmail_service.FetchedEmail) -> str
     return f"Sender {', '.join(senders[:2]) or fetched.sender} is not in the CAD list — skipped"
 
 
-def _process_one_message(db: Session, message_id: str, notification: tuple[datetime, datetime] | None = None) -> int:
-    """`notification` = (published_at, received_at) of the Pub/Sub message
+def _register_message(db: Session, message_id: str, notification: tuple[datetime, datetime] | None = None) -> int:
+    """Downloads one new email and records it, so the dashboard shows it at
+    once. A mail with documents to read is left at stage "queued" for the
+    worker (_read_queued) and counted; a skipped one is finished here.
+    `notification` = (published_at, received_at) of the Pub/Sub message
     that triggered this sync, kept on the email for the latency breakdown."""
     try:
         fetched = gmail_service.fetch_email(message_id)
@@ -242,8 +305,8 @@ def _process_one_message(db: Session, message_id: str, notification: tuple[datet
     if skip_reason:
         set_stage(db, email, "no_attachment", skip_reason)
         return 0
-    set_stage(db, email, "reading", f"Opening {', '.join(names)}")
-    return _run_graph(db, email, fetched)
+    set_stage(db, email, "queued", "Received — waiting to be read")
+    return 1
 
 
 def _run_graph(db: Session, email: ProcessedEmail, fetched: gmail_service.FetchedEmail) -> int:

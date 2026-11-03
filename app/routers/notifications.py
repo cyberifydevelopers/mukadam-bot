@@ -63,6 +63,8 @@ def list_notifications(db: Session = Depends(get_db)):
             tone, title = "bad", "Couldn't read an email"
         elif e.classification == "bank":
             tone, title = "info", f"New email from {_sender(e.sender)}"
+        elif e.stage == "queued":
+            tone, title = "info", f"New email from {_sender(e.sender)}"
         elif e.stage in ("reading", "analyzing", "sending"):
             tone, title = "neutral", f"Reading an email from {_sender(e.sender)}…"
         else:

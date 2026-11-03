@@ -629,7 +629,7 @@ def activity(db: Session = Depends(get_db)):
         }
 
     def selection(e: ProcessedEmail) -> str:
-        if e.stage in ("reading", "analyzing", "sending"):
+        if e.stage in ("queued", "reading", "analyzing", "sending"):
             return "processing"
         if e.stage == "failed":
             return "failed"

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Muccaddam Bot - Full Flow</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--ink:#1d2433;--mut:#667085;--line:#d0d5dd;--blue:#1a73e8;--green:#12805c;--amber:#b54708;--red:#c0362c;--violet:#6941c6;
+--blueb:#e8f0fe;--greenb:#e3f5ee;--amberb:#fff4e0;--redb:#fdeceb;--violetb:#f1ebfd}
+@media(prefers-color-scheme:dark){:root{--bg:#10131a;--card:#181c26;--ink:#e6e9f0;--mut:#98a2b3;--line:#323a4b;--blue:#7ab0ff;--green:#4cd0a0;--amber:#f5b25a;--red:#ff8b80;--violet:#b79cf5;
+--blueb:#16243d;--greenb:#10291f;--amberb:#2e2210;--redb:#341615;--violetb:#241a3d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,Segoe UI,sans-serif}
+main{max-width:980px;margin:0 auto;padding:28px 16px 64px}
+h1{font-size:26px;margin:0 0 4px}h2{font-size:19px;margin:40px 0 12px}
+p.sub{color:var(--mut);margin:0 0 18px}
+.flow{display:flex;flex-direction:column;align-items:center;gap:0}
+.box{width:100%;max-width:640px;border:1.5px solid var(--line);background:var(--card);border-radius:10px;padding:10px 14px}
+.box b{display:block}.box small{color:var(--mut);display:block}
+.box.blue{border-color:var(--blue);background:var(--blueb)}.box.green{border-color:var(--green);background:var(--greenb)}
+.box.amber{border-color:var(--amber);background:var(--amberb)}.box.red{border-color:var(--red);background:var(--redb)}
+.box.violet{border-color:var(--violet);background:var(--violetb)}
+.arrow{width:2px;height:22px;background:var(--line);position:relative;margin:0}
+.arrow::after{content:"";position:absolute;bottom:-1px;left:-4px;border:5px solid transparent;border-top:7px solid var(--line);border-bottom:0}
+.arrow[data-l]::before{content:attr(data-l);position:absolute;left:10px;top:2px;font-size:12px;color:var(--mut);white-space:nowrap}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;width:100%}
+.row .box{max-width:none}
+.tag{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:99px;border:1px solid currentColor;margin-right:6px}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top;font-size:14px}
+th{background:var(--bg);color:var(--mut);font-weight:600}tr:last-child td{border-bottom:0}
+code{background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:0 5px;font-size:13px}
+.ok{color:var(--green);font-weight:600}.todo{color:var(--amber);font-weight:600}.bad{color:var(--red);font-weight:600}
+</style>
+</head>
+<body>
+<main>
+<h1>Muccaddam Bot - how it works, start to finish</h1>
+<p class="sub">Gmail mail comes in, the bot reads the PDF, asks the approver on WhatsApp, and saves to the dashboard. Every signed-in person has their own copy of all of this.</p>
+
+<h2>1. Signing in (each person gets their own dashboard)</h2>
+<div class="flow">
+  <div class="box blue"><b>Open the dashboard</b><small>Not signed in → sent to <code>/login</code></small></div><div class="arrow"></div>
+  <div class="box"><b>"Continue with Google"</b><small><code>/auth/google/start</code> → Google asks for permission to read Gmail (offline, so a refresh token is given)</small></div><div class="arrow"></div>
+  <div class="box"><b>Callback <code>/auth/google/callback</code></b><small>Checks the permission was ticked, gets the Gmail address, checks <code>ALLOWED_EMAILS</code> (if set)</small></div><div class="arrow"></div>
+  <div class="box green"><b>User created, own folder made</b><small><code>data/tenants/&lt;id&gt;/</code>: own database, PDFs, reports, formats, WhatsApp number. User 1 keeps the original data.</small></div><div class="arrow"></div>
+  <div class="box"><b>Gmail watch started for that mailbox</b><small>Signed cookie set (30 days) → dashboard opens showing only this person's data</small></div>
+</div>
+
+<h2>2. A new mail arrives (target: a few seconds)</h2>
+<div class="flow">
+  <div class="box"><b>Bank / supplier emails a PDF to the Gmail account</b></div><div class="arrow"></div>
+  <div class="box blue"><b>Gmail → Google Cloud Pub/Sub topic</b><small>"Google notified" time. This part is Google's and cannot be shortened.</small></div><div class="arrow" data-l="push subscription (instant)"></div>
+  <div class="box green"><b><code>POST /webhook/gmail?token=…</code> on Railway</b><small>Checks <code>PUBSUB_VERIFICATION_TOKEN</code>, answers OK at once, then syncs on a background thread</small></div><div class="arrow"></div>
+  <div class="box"><b>Sync for every user</b><small>One Pub/Sub topic serves all mailboxes. Each user: Gmail History API from their saved cursor → new messages → download PDF attachments → "picked up" time</small></div>
+  <div class="arrow" data-l="safety net"></div>
+  <div class="box amber"><b>Fallbacks</b><small>Safety check every few minutes · Gmail watch renewed automatically before it expires (about 7 days) · "Check Gmail now" button</small></div>
+</div>
+
+<h2>3. Reading the document</h2>
+<div class="flow">
+  <div class="box"><b>PDF saved in the user's folder</b></div><div class="arrow"></div>
+  <div class="box violet"><b>AI reads it</b><small>Type of document, bank, reference, date, amount, currency, items table, enclosed documents</small></div><div class="arrow"></div>
+  <div class="row">
+    <div class="box"><b>Account statement</b><small>Skipped - not tracked</small></div>
+    <div class="box red"><b>Could not read</b><small>Marked failed; "Re-parse" on the dashboard</small></div>
+    <div class="box green"><b>Invoice / bank document</b><small>Continues below</small></div>
+  </div><div class="arrow"></div>
+  <div class="box"><b>Safety checks</b><small>Really sent by that bank? (bank address in the email) · addressed to us? · amount in USD? → flagged in the prompt</small></div><div class="arrow"></div>
+  <div class="box amber"><b>Status: waiting for confirmation</b></div>
+</div>
+
+<h2>4. WhatsApp approval</h2>
+<div class="flow">
+  <div class="box"><b>Prompt sent through OpenWA to the user's approver number</b><small>Details, checks, USD alert, items, "View file" link. Long text is split: "(#16 continued, 2/2)". The last part is the one the answer is matched to.</small></div><div class="arrow"></div>
+  <div class="box"><b>Approver replies</b></div><div class="arrow"></div>
+  <div class="box"><b>OpenWA → <code>/webhook/openwa</code></b><small>Signature checked → which user owns the sender's number → that user's database</small></div><div class="arrow"></div>
+  <div class="row">
+    <div class="box green"><b>YES / YES 16 / 👍</b><small>Saved. Dashboard turns Confirmed. Sheet written only if one is set up (a Sheet error no longer blocks the save).</small></div>
+    <div class="box red"><b>NO / 👎</b><small>Skipped, not saved</small></div>
+    <div class="box violet"><b>"pkr amount 1500000"</b><small>USD document: rupee amount kept, report made in rupees</small></div>
+  </div>
+  <div class="arrow"></div>
+  <div class="row">
+    <div class="box"><b>"rate wheat 3800", "margin 5"</b><small>Figures for a stock report; report made again</small></div>
+    <div class="box"><b>"share pdf for 16"</b><small>Sends the report PDF + Excel (or "original pdf 16")</small></div>
+    <div class="box"><b>Any question</b><small>Answered by AI from the reports</small></div>
+  </div>
+</div>
+
+<h2>5. After YES on a delivery order</h2>
+<div class="flow">
+  <div class="box"><b>Stock report built</b><small>From the saved Excel format for that bank + customer, stock profile figures, USD→PKR if known</small></div><div class="arrow"></div>
+  <div class="box green"><b>PDF + Excel sent back on WhatsApp</b><small>Caption lists anything still missing (rate, margin, weight…) and the dashboard shows an alert until given</small></div>
+</div>
+
+<h2>6. Dashboard</h2>
+<div class="flow">
+  <div class="box"><b>Browser polls <code>/activity/version</code> every 2 seconds</b><small>Cheap check against the server's own database; only when something changed does it reload the lists, and plays the soft chime. Mail never waits on this: it is processed on the server the moment it arrives.</small></div>
+  <div class="arrow"></div>
+  <div class="row">
+    <div class="box"><b>Mails and documents</b></div><div class="box"><b>Stock reports and formats</b></div>
+    <div class="box"><b>Settings</b><small>Connected Google account, WhatsApp approver number</small></div>
+  </div>
+</div>
+
+</main>
+</body>
+</html>
