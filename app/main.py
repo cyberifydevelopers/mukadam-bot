@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from app import network, tenancy
 from app.config import settings
 from app.database import SessionLocal, init_db
-from app.routers import cad, dashboard_api, factories, gmail_webhook, google_login, inventory, invoices, notifications, openwa_webhook, stock_templates, whatsapp_webhook
+from app.routers import cad, dashboard_api, factories, gmail_webhook, google_login, inventory, invoices, legal, notifications, openwa_webhook, stock_templates, whatsapp_webhook
 from app.services import file_link, goods_profiles
 from app.worker import pubsub_listener
 from app.worker.scheduler import start_scheduler, stop_scheduler
@@ -37,6 +37,7 @@ app.include_router(whatsapp_webhook.router)
 app.include_router(openwa_webhook.router)
 app.include_router(gmail_webhook.router)
 app.include_router(google_login.router)
+app.include_router(legal.router)
 app.include_router(invoices.router)
 app.include_router(dashboard_api.router)
 app.include_router(stock_templates.router)

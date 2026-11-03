@@ -107,6 +107,16 @@ class Merging(unittest.TestCase):
         self.assertNotIn("rate_per_unit", rows[2])
         self.assertIn("Rate per unit: 3800", applied)
 
+    def test_a_line_takes_its_best_match_not_the_first_one_that_resembles_it(self):
+        """"Cotton Bales" shares a word with "Cotton Seed Oil Cake", but "Oil Cake" is the line that belongs to it."""
+        rec = self.record([{"description": "Putti (munds)"}, {"description": "Cotton Seed Oil Cake"}])
+        new = {"rows": [{"description": "Putti", "margin_pct": "20"},
+                        {"description": "Cotton Bales", "margin_pct": "25"},
+                        {"description": "Oil Cake", "margin_pct": "30"}]}
+        stock_update.merge(rec, new)
+        rows = json.loads(rec.raw_extracted_json)["delivery_order"]["rows"]
+        self.assertEqual([r.get("margin_pct") for r in rows], ["20", "30"])
+
     def test_blank_figures_never_erase_existing_ones(self):
         rec = self.record([{"description": "Putti", "rate_per_unit": "3800"}])
         stock_update.merge(rec, {"rows": [{"description": "Putti", "rate_per_unit": "", "margin_pct": None}]})

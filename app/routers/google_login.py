@@ -40,7 +40,7 @@ COOKIE = "mukadam_session"
 COOKIE_SECONDS = 30 * 24 * 3600
 
 # Open to anybody, signed in or not: the sign-in itself, the webhooks (their own checks), the signed "view file" link.
-PUBLIC_PREFIXES = ("/login", "/auth/", "/webhook/", "/view/", "/health")
+PUBLIC_PREFIXES = ("/login", "/auth/", "/webhook/", "/view/", "/health", "/about", "/privacy", "/terms")
 
 # state -> (PKCE code verifier, time started), for the few minutes between the redirect to Google and back.
 _pending: dict[str, tuple[str, float]] = {}
@@ -181,6 +181,14 @@ background:#fff;color:#1f2937;font-weight:600;font-size:15px;text-decoration:non
 .points b{color:var(--accent);flex:none}
 .alert{margin:0 0 20px;padding:10px 14px;border-radius:10px;background:var(--bad-bg);color:var(--bad);font-size:14px;text-align:left}
 .msg{margin:0 0 24px;color:var(--muted);text-align:left}
+.foot{margin:22px 0 0;font-size:12.5px;color:var(--muted)}
+.foot a,.card.wide a:not(.btn){color:var(--accent)}
+.card.wide{max-width:720px;text-align:left}
+.card.wide .logo{margin-left:0}
+.card.wide h2{margin:26px 0 6px;font-size:16px}
+.card.wide p,.card.wide li{color:var(--muted);margin:0 0 10px}
+.card.wide ul{padding-left:20px;margin:0 0 10px}
+.card.wide .btn{display:inline-flex;width:auto}
 """
 
 _GOOGLE_G = (
@@ -193,11 +201,11 @@ _GOOGLE_G = (
 )
 
 
-def _shell(title: str, body: str, status: int = 200) -> HTMLResponse:
+def _shell(title: str, body: str, status: int = 200, wide: bool = False) -> HTMLResponse:
     return HTMLResponse(
         "<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
         f"<title>{escape(title)} · Muccaddam Bot</title><style>{_PAGE_CSS}</style>"
-        f"<body><main class=card><div class=logo>M</div>{body}</main></body></html>",
+        f"<body><main class='card{' wide' if wide else ''}'><div class=logo>M</div>{body}</main></body></html>",
         status_code=status,
     )
 
@@ -232,7 +240,8 @@ def login_page(request: Request, error: str = ""):
     return _shell(
         "Sign in",
         f"<h1>Welcome to Muccaddam Bot</h1><p class=sub>Sign in with the Gmail account whose bank emails you want to track.</p>"
-        f"{alert}{button}<ul class=points>{points}</ul>",
+        f"{alert}{button}<ul class=points>{points}</ul>"
+        "<p class=foot><a href='/about'>About</a> · <a href='/privacy'>Privacy Policy</a> · <a href='/terms'>Terms of Service</a></p>",
     )
 
 

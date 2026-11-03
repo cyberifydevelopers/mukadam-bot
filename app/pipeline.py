@@ -128,6 +128,8 @@ def _read_one_queued(db: Session, email_id: int) -> None:
         names = ", ".join(json.loads(email.attachment_names or "[]"))
         set_stage(db, email, "reading", f"Opening {names}" if names else "Opening the email")
         fetched = gmail_service.fetch_email(email.message_id)
+        # A mail with no attachment is read from its body: this (re)saves it as the document the graph reads.
+        _documents_to_read(fetched)
         _run_graph(db, email, fetched)
     except Exception as exc:
         # One bad email must not stop the others; it is marked failed, with the reason, for a retry from the dashboard.

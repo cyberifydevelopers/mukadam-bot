@@ -1167,7 +1167,8 @@ const views = {
         </form>`;
       }).join("");
       return `<div class="panel fac-card"><h2>${esc(f.name)}
-          <span class="right">${f.orders.length} order${f.orders.length === 1 ? "" : "s"}${f.orders.length ? " · " + f.orders.slice(-3).map((o) => `<a href="#invoice/${o}">#${o}</a>`).join(" ") : ""}</span></h2>
+          <span class="right">${f.orders.length} order${f.orders.length === 1 ? "" : "s"}${f.orders.length ? " · " + f.orders.slice(-3).map((o) => `<a href="#invoice/${o}">#${o}</a>`).join(" ") : ""}
+            <button type="button" class="icon danger" data-action="factory-remove" data-customer="${esc(f.key)}" data-name="${esc(f.name)}" title="Remove this factory">${ICON.trash}</button></span></h2>
         <div class="goods-list">${rows || `<div class="empty-state">No goods yet.</div>`}</div></div>`;
     }).join("");
     return pageHeader("Factories", "What the bot keeps for each factory's goods. Give margin, weight and rate once (on WhatsApp or here) and every later invoice of that factory's goods uses them without asking. A change applies from the next invoice.") +
@@ -1644,6 +1645,10 @@ document.addEventListener("click", async (ev) => {
     title: "Forget these figures?", confirmLabel: "Forget",
     body: `<p><b>${esc(btn.dataset.name)}</b></p><p>Its margin, weight and rate are removed. The next invoice of these goods will ask for them again. Reports already made are not changed.</p>`,
   }))) return;
+  if (btn.dataset.action === "factory-remove" && !(await askDialog({
+    title: "Remove this factory?", confirmLabel: "Remove",
+    body: `<p><b>${esc(btn.dataset.name)}</b></p><p>It is taken off this list and the margin, weight and rate kept for its goods are forgotten.</p><div class="keep">Its orders, reports and Google Sheet rows are not deleted. The factory comes back if a new delivery order for it is confirmed.</div>`,
+  }))) return;
   if (btn.dataset.action === "cad-remove" && !(await askDialog({
     title: "Remove this person?", confirmLabel: "Remove",
     body: `<p><b>${esc(btn.dataset.address)}</b>${btn.dataset.name ? ` (${esc(btn.dataset.name)})` : ""}</p><p>Emails from them will no longer be read${btn.dataset.last ? ", and as this is the last person on the list, emails from anyone will be read again" : ""}.</p>`,
@@ -1670,6 +1675,9 @@ document.addEventListener("click", async (ev) => {
     } else if (btn.dataset.action === "goods-clear") {
       await api(`/factories/${encodeURIComponent(btn.dataset.customer)}/${encodeURIComponent(btn.dataset.goods)}`, { method: "DELETE" });
       toast("Forgotten. It will be asked for again on the next invoice");
+    } else if (btn.dataset.action === "factory-remove") {
+      await api(`/factories/${encodeURIComponent(btn.dataset.customer)}`, { method: "DELETE" });
+      toast("Factory removed");
     } else if (btn.dataset.action === "cad-remove") {
       await api(`/cad/${btn.dataset.id}`, { method: "DELETE" });
       toast(`Removed ${btn.dataset.address}`);

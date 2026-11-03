@@ -185,6 +185,26 @@ class FactoriesTab(InMemory):
         self.assertEqual(len(goods), 2)
         self.assertEqual(next(g for g in goods if g["orders"] == [1, 2])["margin_pct"], "22")
 
+    def test_a_removed_factory_leaves_the_list_with_its_figures_but_keeps_its_orders(self):
+        self.client.put(f"/api/factories/{KEY}/{goods_profiles.goods_key('Putty')}", json={"margin_pct": "20"})
+        self.assertEqual(self.client.delete(f"/api/factories/{KEY}").json(), {"deleted": True})
+        self.assertEqual(self.client.get("/api/factories").json()["factories"], [])
+        with self.Session() as s:
+            self.assertEqual(s.query(GoodsProfile).count(), 0)
+            self.assertEqual(s.query(InvoiceRecord).count(), 3)  # the orders are not deleted
+
+    def test_a_removed_factory_comes_back_with_a_newer_order(self):
+        self.client.delete(f"/api/factories/{KEY}")
+        with self.Session() as s:
+            body = {"delivery_order": {**order("Putti"), "rows": [{"description": "Putti", "opening_balance": "5"}]}}
+            s.add(InvoiceRecord(id=9, email_id=1, pdf_filename="h_9.pdf", status=InvoiceStatus.CONFIRMED, raw_extracted_json=json.dumps(body)))
+            s.commit()
+        (factory,) = self.client.get("/api/factories").json()["factories"]
+        self.assertEqual(factory["orders"], [9])
+
+    def test_removing_an_unknown_factory_is_a_404(self):
+        self.assertEqual(self.client.delete("/api/factories/nobody").status_code, 404)
+
 
 if __name__ == "__main__":
     unittest.main()

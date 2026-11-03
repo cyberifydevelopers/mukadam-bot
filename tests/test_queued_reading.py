@@ -68,6 +68,30 @@ class QueuedReading(unittest.TestCase):
             self.assertEqual(seen, ["reading"])
             self.assertEqual(db.query(ProcessedEmail).one().stage, "done")
 
+    def test_a_mail_with_no_attachment_is_read_from_its_body(self):
+        """The worker fetches the mail again, so it must make the body document again too: the graph reads attachment_paths."""
+        seen = []
+
+        def bodyless(message_id):
+            return FetchedEmail(message_id=message_id, sender="a@b.c", subject="", received_at=datetime.utcnow(),
+                                attachment_paths=[], body_text="Please deliver", image_paths=[])
+
+        def graph(db, email, fetched_email):
+            seen.append(list(fetched_email.attachment_paths))
+            email.stage = "done"
+            db.commit()
+            return 1
+
+        with self.Session() as db, \
+             mock.patch.object(pipeline.gmail_service, "fetch_email", side_effect=bodyless), \
+             mock.patch.object(pipeline, "_documents_to_read", side_effect=lambda f: f.attachment_paths.append("/x/id_email_body.txt")), \
+             mock.patch.object(pipeline, "_run_graph", side_effect=graph):
+            with mock.patch.object(pipeline, "_start_worker"):
+                pipeline._register_message(db, "m1")
+            pipeline._start_worker()
+            self.wait_for_worker()
+        self.assertEqual(seen, [["/x/id_email_body.txt"]])
+
     def test_a_failing_mail_is_marked_failed_and_the_next_one_still_runs(self):
         def graph(db, email, _fetched):
             if email.message_id == "m1":

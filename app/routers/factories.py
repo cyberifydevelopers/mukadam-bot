@@ -1,6 +1,7 @@
 """The Factories tab: each customer (factory) the bot has a delivery order for, and the figures kept for its goods
 (margin, weight, rate — see app/services/goods_profiles.py), which can be corrected or cleared here."""
 
+import json
 import re
 from datetime import datetime
 
@@ -9,12 +10,24 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import GoodsProfile, InvoiceRecord, InvoiceStatus
+from app.models import AppSetting, GoodsProfile, InvoiceRecord, InvoiceStatus
 from app.services import goods_profiles, stock_report
 
 router = APIRouter(prefix="/api/factories", tags=["factories"])
 
 _NUMBER = re.compile(r"^\d[\d,]*(?:\.\d+)?$")
+
+# A removed factory: {customer_key: id of its newest order at that time}. Orders up to that one no longer list it (the
+# orders themselves stay), so a factory comes back by itself when a newer delivery order is confirmed.
+_HIDDEN = "hidden_factories"
+
+
+def _hidden(db: Session) -> dict[str, int]:
+    row = db.get(AppSetting, _HIDDEN)
+    try:
+        return json.loads(row.value) if row else {}
+    except ValueError:
+        return {}
 
 
 class ProfileIn(BaseModel):
@@ -36,11 +49,12 @@ def list_factories(db: Session = Depends(get_db)):
     def factory(key: str, name: str) -> dict:
         return factories.setdefault(key, {"key": key, "name": name, "orders": set(), "goods": {}})
 
+    hidden = _hidden(db)
     confirmed = db.query(InvoiceRecord).filter(InvoiceRecord.status == InvoiceStatus.CONFIRMED).order_by(InvoiceRecord.id)
     for record in confirmed:
         order = stock_report.delivery_order(record)
         key = goods_profiles.customer_key(order) if order else ""
-        if not key:
+        if not key or record.id <= hidden.get(key, 0):
             continue
         entry = factory(key, stock_report._customer(order))
         entry["name"] = stock_report._customer(order)
@@ -89,6 +103,31 @@ def save_profile(customer_key: str, goods_key: str, body: ProfileIn, db: Session
     profile.updated_at = datetime.utcnow()
     db.commit()
     return {"saved": True}
+
+
+@router.delete("/{customer_key}")
+def remove_factory(customer_key: str, db: Session = Depends(get_db)):
+    """Takes a factory off the list and forgets everything kept for its goods. Its orders, reports and Sheet rows are
+    not touched; a delivery order confirmed later brings the factory back."""
+    profiles = db.query(GoodsProfile).filter_by(customer_key=customer_key).all()
+    newest = 0
+    for record in db.query(InvoiceRecord).filter(InvoiceRecord.status == InvoiceStatus.CONFIRMED):
+        order = stock_report.delivery_order(record)
+        if order and goods_profiles.customer_key(order) == customer_key:
+            newest = max(newest, record.id)
+    if not profiles and not newest:
+        raise HTTPException(404, "No such factory")
+    for profile in profiles:
+        db.delete(profile)
+    hidden = _hidden(db)
+    hidden[customer_key] = newest
+    row = db.get(AppSetting, _HIDDEN)
+    if row is None:
+        db.add(AppSetting(key=_HIDDEN, value=json.dumps(hidden)))
+    else:
+        row.value = json.dumps(hidden)
+    db.commit()
+    return {"deleted": True}
 
 
 @router.delete("/{customer_key}/{goods_key}")

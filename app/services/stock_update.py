@@ -179,23 +179,27 @@ def _pair(old_rows: list[dict], new_rows: list[dict]) -> list[tuple[dict, dict]]
 
     pairs: list[tuple[dict, dict]] = []
     used: set[int] = set()
+    paired: set[int] = set()
+    # The best matches first, over all the lines together: taking the new lines in turn let "Cotton Bales" grab
+    # "Cotton Seed Oil Cake" before "Oil Cake" (a perfect match for it) was looked at.
+    candidates = []
     for j, new in enumerate(new_rows):
-        best, best_score = None, 0.0
         for i, old in enumerate(old_rows):
-            if i in used:
-                continue
-            q_new, q_old = quantities(new), quantities(old)
-            same_qty = any(a is not None and a != 0 and a == b for a, b in zip(q_new, q_old))
+            same_qty = any(a is not None and a != 0 and a == b for a, b in zip(quantities(new), quantities(old)))
             score = 2.0 if same_qty else stock_report._similarity(
                 stock_report._words(new.get("description")), stock_report._words(old.get("description"))
             )
-            if score > best_score:
-                best, best_score = i, score
-        if best is not None and best_score >= 0.5:
-            used.add(best)
-            pairs.append((old_rows[best], new))
-        elif len(old_rows) == len(new_rows) and j not in used and goods_profiles.goods_key(new.get("description")) in ("", goods_profiles.goods_key(old_rows[j].get("description"))):
+            if score >= 0.5:
+                candidates.append((score, j, i))
+    for score, j, i in sorted(candidates, key=lambda c: (-c[0], c[1], c[2])):
+        if i not in used and j not in paired:
+            used.add(i)
+            paired.add(j)
+            pairs.append((old_rows[i], new_rows[j]))
+    for j, new in enumerate(new_rows):
+        if j not in paired and len(old_rows) == len(new_rows) and j not in used and goods_profiles.goods_key(new.get("description")) in ("", goods_profiles.goods_key(old_rows[j].get("description"))):
             used.add(j)  # same position, and not obviously other goods
+            paired.add(j)
             pairs.append((old_rows[j], new))
     # A line naming no goods and no quantities ("rate 3800" in a short message) is for every line not paired yet.
     for new in new_rows:
