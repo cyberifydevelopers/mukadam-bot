@@ -157,32 +157,82 @@ def me():
 
 # ---------- sign-in ----------
 
-def _page(title: str, text: str, link: str = "/login", link_text: str = "Back to sign in", status: int = 400) -> HTMLResponse:
+# Same colours as the dashboard (app/static/index.html), light and dark.
+_PAGE_CSS = """
+:root{--bg:#f6f7f9;--panel:#fff;--fg:#111827;--muted:#6b7280;--border:#e5e7eb;--accent:#2563eb;--accent-soft:#dbeafe;--bad:#b91c1c;--bad-bg:#fee2e2}
+@media(prefers-color-scheme:dark){:root{--bg:#0b0f17;--panel:#131a24;--fg:#e5e7eb;--muted:#94a3b8;--border:#243042;--accent:#3b82f6;--accent-soft:#132646;--bad:#f87171;--bad-bg:#3a1212}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px 16px;background:var(--bg);color:var(--fg);
+font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.card{width:100%;max-width:400px;background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:36px 32px;text-align:center;
+box-shadow:0 10px 30px rgba(15,23,42,.08)}
+.logo{width:52px;height:52px;margin:0 auto 18px;border-radius:14px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;
+font-weight:700;font-size:22px}
+h1{margin:0 0 6px;font-size:22px;letter-spacing:-.2px}
+.sub{margin:0 0 24px;color:var(--muted)}
+.btn{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;padding:12px 18px;border-radius:10px;border:1px solid var(--border);
+background:#fff;color:#1f2937;font-weight:600;font-size:15px;text-decoration:none;transition:box-shadow .15s,border-color .15s}
+.btn:hover{border-color:var(--accent);box-shadow:0 2px 10px rgba(37,99,235,.18)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.note{margin:14px 0 0;font-size:13px;color:var(--muted)}
+.points{list-style:none;margin:26px 0 0;padding:20px 0 0;border-top:1px solid var(--border);text-align:left;font-size:13.5px;color:var(--muted)}
+.points li{display:flex;gap:10px;margin:0 0 10px}
+.points li:last-child{margin:0}
+.points b{color:var(--accent);flex:none}
+.alert{margin:0 0 20px;padding:10px 14px;border-radius:10px;background:var(--bad-bg);color:var(--bad);font-size:14px;text-align:left}
+.msg{margin:0 0 24px;color:var(--muted);text-align:left}
+"""
+
+_GOOGLE_G = (
+    "<svg width='20' height='20' viewBox='0 0 48 48' aria-hidden='true'>"
+    "<path fill='#EA4335' d='M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z'/>"
+    "<path fill='#4285F4' d='M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.1 5.3-4.6 7l7.1 5.5c4.2-3.8 6.7-9.5 6.7-17z'/>"
+    "<path fill='#FBBC05' d='M10.5 28.7a14.5 14.5 0 0 1 0-9.4l-7.9-6.1a24 24 0 0 0 0 21.6l7.9-6.1z'/>"
+    "<path fill='#34A853' d='M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.1-5.5c-2 1.4-4.6 2.3-8.8 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z'/>"
+    "</svg>"
+)
+
+
+def _shell(title: str, body: str, status: int = 200) -> HTMLResponse:
     return HTMLResponse(
-        f"<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
-        f"<title>{escape(title)}</title>"
-        f"<body style='font:16px system-ui;max-width:480px;margin:15vh auto;padding:0 16px'>"
-        f"<h2>{escape(title)}</h2><p>{escape(text)}</p><p><a href='{escape(link)}'>{escape(link_text)}</a></p></body>",
+        "<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
+        f"<title>{escape(title)} · Muccaddam Bot</title><style>{_PAGE_CSS}</style>"
+        f"<body><main class=card><div class=logo>M</div>{body}</main></body></html>",
         status_code=status,
     )
 
 
+def _page(title: str, text: str, link: str = "/login", link_text: str = "Back to sign in", status: int = 400) -> HTMLResponse:
+    return _shell(
+        title,
+        f"<h1>{escape(title)}</h1><p class=msg>{escape(text)}</p><a class='btn primary' href='{escape(link)}'>{escape(link_text)}</a>",
+        status,
+    )
+
+
+_POINTS = (
+    "Your bank emails are read automatically and sent to WhatsApp for a YES / NO.",
+    "Read-only access to your Gmail. Nothing is ever sent, changed or deleted.",
+    "Everyone sees only their own dashboard.",
+)
+
+
 @router.get("/login", include_in_schema=False)
-def login_page(request: Request):
+def login_page(request: Request, error: str = ""):
     if _user_from_cookie(request.cookies.get(COOKIE, "")) is not None:
         return RedirectResponse("/")
     button = (
-        "<a href='/auth/google/start' style='display:inline-block;padding:12px 22px;background:#1a73e8;color:#fff;"
-        "border-radius:8px;text-decoration:none;font-weight:600'>Continue with Google</a>"
+        f"<a class=btn href='/auth/google/start'>{_GOOGLE_G}<span>Continue with Google</span></a>"
+        "<p class=note>New here? Signing in with Google creates your dashboard automatically.</p>"
         if is_available()
-        else "<p>Google sign-in isn't set up yet (the OAuth client is missing).</p>"
+        else "<div class=alert>Google sign-in isn't set up yet (the OAuth client is missing).</div>"
     )
-    return HTMLResponse(
-        "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
-        "<title>Sign in</title><body style='font:16px system-ui;max-width:420px;margin:18vh auto;padding:0 16px;text-align:center'>"
-        "<h2>Muccaddam Bot</h2><p style='color:#666'>Sign in with the Gmail account whose bank emails you want to track. "
-        "Everyone sees only their own dashboard.</p>"
-        f"<p style='margin-top:28px'>{button}</p></body>"
+    alert = f"<div class=alert>{escape(error)}</div>" if error else ""
+    points = "".join(f"<li><b>✓</b><span>{escape(p)}</span></li>" for p in _POINTS)
+    return _shell(
+        "Sign in",
+        f"<h1>Welcome to Muccaddam Bot</h1><p class=sub>Sign in with the Gmail account whose bank emails you want to track.</p>"
+        f"{alert}{button}<ul class=points>{points}</ul>",
     )
 
 
