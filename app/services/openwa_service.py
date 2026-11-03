@@ -203,6 +203,8 @@ class PkrRequest:
     text: str
     rate: float | None = None  # rupees per dollar
     amount: float | None = None  # the whole amount in rupees
+    bare: bool = False  # "rate is 280": a dollar rate only if the document is in USD, else it is a goods rate
+    free: bool = False  # no fixed form matched: any message with a number, to be read by the AI (services/pkr_intent.py)
 
 
 @dataclass
@@ -438,6 +440,12 @@ _USD_RATE_RE = re.compile(
     r"|\b1\s*(?:usd|dollar|\$)\s*=\s*(?:rs\.?|pkr)?\s*(\d+(?:\.\d+)?)",
     re.IGNORECASE,
 )
+# "rate is 280", "pkr rate 280", "rate: 280 for #7" — a rate with no dollar or goods named: the dollar rate when the
+# document it is about is in USD and still without its rupee amount (see _handle_payload), else a goods rate
+_BARE_RATE_RE = re.compile(
+    r"^\W*(?:(?:pkr|rs\.?|rupees?)\s*)?rate\s*(?:is|=|:)?\s*(?:rs\.?|pkr)?\s*(\d+(?:\.\d+)?)\W*(?:(?:for|of)?\s*(?:#|report|record|order)\s*#?\s*\d+)?\W*$",
+    re.IGNORECASE,
+)
 # "pkr amount 1500000", "amount in pkr 1,500,000", "pkr 1500000", "rs 1500000"
 _PKR_AMOUNT_RE = re.compile(
     r"^\W*(?:pkr|rs\.?|rupees?)\s*(?:amount|total)?\s*(?:is|=|:)?\s*(\d[\d,]*(?:\.\d+)?)\W*(?:(?:for|of)?\s*(?:#|report|record|order)\s*#?\s*\d+)?\W*$"
@@ -458,10 +466,13 @@ def parse_pkr_request(webhook_payload: dict) -> PkrRequest | None:
     if not body or looks_like_question(body):
         return None
     rate = amount = None
+    bare = False
     if found := _USD_RATE_RE.search(body):
         rate = float(next(g for g in found.groups() if g))
     elif found := _PKR_AMOUNT_RE.search(body):
         amount = float(next(g for g in found.groups() if g).replace(",", ""))
+    elif found := _BARE_RATE_RE.search(body):
+        rate, bare = float(found.group(1)), True
     if rate is None and amount is None:
         return None
     label = _REPORT_LABEL_RE.search(body)
@@ -473,6 +484,29 @@ def parse_pkr_request(webhook_payload: dict) -> PkrRequest | None:
         text=body,
         rate=rate,
         amount=amount,
+        bare=bare,
+    )
+
+
+def parse_free_message(webhook_payload: dict) -> PkrRequest | None:
+    """Any text message with a number in it that isn't a YES / NO, as a PkrRequest with nothing read from it yet: whether
+    it gives the dollar rate or the rupee amount, in whatever words, is for services/pkr_intent.py to say."""
+    if webhook_payload.get("event") != "message.received":
+        return None
+    data = webhook_payload.get("data") or {}
+    if data.get("fromMe") or data.get("isGroup") or data.get("isStatusBroadcast"):
+        return None
+    body = (data.get("body") or "").strip()
+    if not body or not re.search(r"\d", body) or _REPLY_RE.match(body):
+        return None
+    label = _REPORT_LABEL_RE.search(body)
+    return PkrRequest(
+        sender_phone=_sender_phone(data),
+        quoted_message_id=(data.get("quotedMessage") or {}).get("id"),
+        target_label=label.group(1) if label else None,
+        message_id=data.get("id", ""),
+        text=body,
+        free=True,
     )
 
 

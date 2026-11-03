@@ -46,11 +46,15 @@ class Parsing(unittest.TestCase):
         self.assertEqual(request("usd rate 280", quoted="wamid.P").quoted_message_id, "wamid.P")
 
     def test_questions_and_goods_figures_are_not_taken_for_it(self):
-        for text in ["what is the usd rate?", "rate 3800", "margin wheat 5", "pkr?", "hello", "send pdf for 4", "the rate is 280"]:
+        for text in ["what is the usd rate?", "margin wheat 5", "rate wheat 3800", "pkr?", "hello", "send pdf for 4", "the rate is 280"]:
             self.assertIsNone(request(text), text)
 
-    def test_a_dollar_rate_is_not_read_as_a_goods_rate(self):
-        self.assertIsNone(openwa_service.parse_pkr_request(payload("rate 280")))
+    def test_a_bare_rate_is_read_but_only_as_a_maybe(self):
+        for text in ["rate is 280", "rate 280", "pkr rate 280", "Rate: 280 for #7"]:
+            req = request(text)
+            self.assertIsNotNone(req, text)
+            self.assertEqual((req.rate, req.amount, req.bare), (280.0, None, True), text)
+        self.assertFalse(request("usd rate 280").bare)  # a named dollar rate is certain
 
 
 class Calculations(Database):
@@ -270,6 +274,92 @@ class Reply(Calculations):
         with mock.patch.object(openwa_webhook, "_handle_figures_request", return_value={"status": "ok"}) as figures:
             self.say("rate wheat 3800", quoted="wamid.R")
         figures.assert_called_once()
+
+    def read_as(self, reading):
+        return mock.patch.object(openwa_webhook.pkr_intent, "understand", return_value=reading)
+
+    def test_any_wording_the_ai_reads_as_the_dollar_rate_is_applied(self):
+        self.usd_record(extra={"delivery_order": dict(USD_ORDER)}, status=InvoiceStatus.CONFIRMED)
+        reading = {"kind": "dollar_rate", "rate": 281.5, "amount": None}
+        with self.read_as(reading) as understand, mock.patch.object(openwa_webhook, "_handle_figures_request") as figures:
+            _, remake = self.say("aaj dollar ka rate 281.5 chal raha hai")
+        understand.assert_called_once()
+        figures.assert_not_called()
+        self.assertEqual(json.loads(self.db.get(InvoiceRecord, 20).raw_extracted_json)["pkr"]["rate"], 281.5)
+        remake.assert_called_once()  # the stock report is made again in rupees
+
+    def test_any_wording_the_ai_reads_as_the_rupee_amount_is_applied(self):
+        self.usd_record()
+        with self.read_as({"kind": "pkr_amount", "rate": None, "amount": 1450000.0}):
+            self.say("bank ne 14.5 lakh PKR bola hai")
+        self.assertEqual(json.loads(self.db.get(InvoiceRecord, 20).raw_extracted_json)["pkr"]["amount"], 1450000.0)
+
+    def test_a_number_the_ai_says_is_about_something_else_goes_on_to_the_other_flows(self):
+        self.usd_record()
+        with self.read_as({"kind": "other", "rate": None, "amount": None}),              mock.patch.object(openwa_webhook, "_handle_figures_request", return_value={"status": "ok"}) as figures:
+            self.say("rate wheat 3800", quoted="wamid.R")
+        figures.assert_called_once()
+        self.assertNotIn("pkr", json.loads(self.db.get(InvoiceRecord, 20).raw_extracted_json))
+
+    def test_a_bare_rate_is_still_the_dollar_rate_when_the_ai_service_is_down(self):
+        self.usd_record()
+        with self.read_as(None):
+            self.say("rate is 280")
+        self.assertEqual(json.loads(self.db.get(InvoiceRecord, 20).raw_extracted_json)["pkr"]["rate"], 280.0)
+
+    def test_other_wording_is_left_alone_when_the_ai_service_is_down(self):
+        self.usd_record()
+        with self.read_as(None):
+            self.say("dollar ka rate 281.5 hai")
+        self.assertNotIn("pkr", json.loads(self.db.get(InvoiceRecord, 20).raw_extracted_json))
+
+    def test_the_ai_is_not_asked_when_no_usd_document_waits(self):
+        self.usd_record(extra={"currency": "PKR"})
+        with self.read_as({"kind": "dollar_rate", "rate": 280.0, "amount": None}) as understand:
+            self.say("rate 3800", quoted="wamid.R")
+            self.say("rate is 280")
+        understand.assert_not_called()
+
+    def test_a_usd_document_that_already_has_its_rupees_is_not_asked_about_again(self):
+        self.usd_record(extra={"pkr": {"rate": 280.0, "amount": 1400000.0}})
+        with self.read_as({"kind": "dollar_rate", "rate": 300.0, "amount": None}) as understand:
+            self.say("rate 3800 for #20")
+        understand.assert_not_called()
+        self.assertEqual(json.loads(self.db.get(InvoiceRecord, 20).raw_extracted_json)["pkr"]["rate"], 280.0)
+
+    def test_a_stranger_is_never_sent_to_the_ai(self):
+        self.usd_record()
+        with self.read_as({"kind": "dollar_rate", "rate": 300.0, "amount": None}) as understand:
+            openwa_webhook._handle_payload(self.db, payload("rate is 300", sender="923009999999@c.us"))
+        understand.assert_not_called()
+        self.assertNotIn("pkr", json.loads(self.db.get(InvoiceRecord, 20).raw_extracted_json))
+
+
+class Intent(unittest.TestCase):
+    """services/pkr_intent.py: the AI's answer is checked, never trusted blindly."""
+
+    def ask(self, content):
+        from app.services import pkr_intent
+        record = InvoiceRecord(id=20, email_id=1, pdf_filename="h.pdf", amount="5,000.00", raw_extracted_json=json.dumps({"currency": "USD"}))
+        response = mock.Mock(choices=[mock.Mock(message=mock.Mock(content=content))])
+        with mock.patch("app.parsers.llm_parser.openrouter_client"),              mock.patch("app.parsers.llm_parser.chat_with_fallback", return_value=response):
+            return pkr_intent.understand("anything", record)
+
+    def test_a_dollar_rate_and_a_rupee_amount_are_read(self):
+        self.assertEqual(self.ask('{"kind": "dollar_rate", "rate": 280, "amount": null}'), {"kind": "dollar_rate", "rate": 280.0, "amount": None})
+        fenced = '```json\n{"kind": "pkr_amount", "rate": null, "amount": "1,400,000"}\n```'
+        self.assertEqual(self.ask(fenced), {"kind": "pkr_amount", "rate": None, "amount": 1400000.0})
+
+    def test_an_answer_without_its_number_or_with_a_bad_one_is_other(self):
+        other = {"kind": "other", "rate": None, "amount": None}
+        for content in ['{"kind": "dollar_rate", "rate": null}', '{"kind": "dollar_rate", "rate": -3}', '{"kind": "maybe"}', '{"kind": "other"}']:
+            self.assertEqual(self.ask(content), other, content)
+
+    def test_nonsense_or_a_failed_call_is_none(self):
+        self.assertIsNone(self.ask("I think it is 280"))
+        from app.services import pkr_intent
+        with mock.patch("app.parsers.llm_parser.openrouter_client", side_effect=RuntimeError("down")):
+            self.assertIsNone(pkr_intent.understand("rate 280", InvoiceRecord(id=1, email_id=1, pdf_filename="h.pdf", raw_extracted_json="{}")))
 
 
 if __name__ == "__main__":
