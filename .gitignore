@@ -10,3 +10,5 @@ data/stock_reports/
 credentials/client_secret.json
 credentials/token.json
 data/stock_templates/
+
+data/tenants/

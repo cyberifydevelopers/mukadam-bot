@@ -202,6 +202,7 @@ class PkrRequest:
     text: str
     rate: float | None = None  # rupees per dollar
     amount: float | None = None  # the whole amount in rupees
+    wants_report: bool = False  # "1 usd = 280 pkr / share report": the report is asked for in the same message
 
 
 @dataclass
@@ -363,7 +364,7 @@ def parse_pdf_request(webhook_payload: dict) -> PdfRequest | None:
         return None  # not about files, or a figure ("report 16 margin 5") or a long message
     if looks_like_question(body) and not _SEND_WORD_RE.search(body):
         return None  # "what is margin in this report?" is a question, "can you send pdf for 4?" is a request
-    found = _LABEL_NUMBER_RE.search(body)
+    found = _LABEL_NUMBER_RE.search(_USD_LOOSE_RE.sub(" ", _USD_RATE_RE.sub(" ", body)))  # the 1 of "1 usd = 280" is no report number
     label = found.group(1) if found else None
     quoted = (data.get("quotedMessage") or {}).get("id")
     if not label and not quoted:
@@ -434,10 +435,18 @@ def parse_question(webhook_payload: dict) -> Question | None:
 
 # "usd rate 280", "dollar rate is 280", "$ rate = 281.5", "1 usd = 280"
 _USD_RATE_RE = re.compile(
-    r"(?:\b(?:usd|us\s*dollars?|dollars?)\b|\$)\s*(?:to\s*pkr\s*)?rate\s*(?:is|=|:)?\s*(?:rs\.?|pkr)?\s*(\d+(?:\.\d+)?)"
+    r"(?:\b(?:usd|us\s*dollars?|dollars?)\b|\$)\s*(?:ka\s*)?(?:to\s*pkr\s*)?rate\s*(?:is|=|:)?\s*(?:rs\.?|pkr)?\s*(\d+(?:\.\d+)?)"
     r"|\b1\s*(?:usd|dollar|\$)\s*=\s*(?:rs\.?|pkr)?\s*(\d+(?:\.\d+)?)",
     re.IGNORECASE,
 )
+# The same rate said loosely: "usd = 280", "1 dollar is 280 rupees", "usd to pkr 280", "usd/pkr 280", "dollar 280 pkr",
+# "dollar ka rate 280". Only taken for a believable rate (RATE_RANGE), so "usd is 5000" about an amount isn't one.
+_USD_LOOSE_RE = re.compile(
+    r"(?:\b1\s*)?(?:\busd\b|\bus\s*dollars?\b|\bdollars?\b|\$)\s*(?:ka\s*rate\s*)?"
+    r"(?:(?:=|:|-|is|equals?|to\s*pkr|/\s*pkr)\s*)?(?:=\s*)?(?:rs\.?\s*|pkr\s*|rupees?\s*)?(\d+(?:\.\d+)?)\s*(?:pkr|rs\b|rupees?)?",
+    re.IGNORECASE,
+)
+_RATE_RANGE = (50, 1000)
 # "pkr amount 1500000", "amount in pkr 1,500,000", "pkr 1500000", "rs 1500000"
 _PKR_AMOUNT_RE = re.compile(
     r"^\W*(?:pkr|rs\.?|rupees?)\s*(?:amount|total)?\s*(?:is|=|:)?\s*(\d[\d,]*(?:\.\d+)?)\W*(?:(?:for|of)?\s*(?:#|report|record|order)\s*#?\s*\d+)?\W*$"
@@ -460,6 +469,8 @@ def parse_pkr_request(webhook_payload: dict) -> PkrRequest | None:
     rate = amount = None
     if found := _USD_RATE_RE.search(body):
         rate = float(next(g for g in found.groups() if g))
+    elif (found := _USD_LOOSE_RE.search(body)) and _RATE_RANGE[0] <= float(found.group(1)) <= _RATE_RANGE[1]:
+        rate = float(found.group(1))
     elif found := _PKR_AMOUNT_RE.search(body):
         amount = float(next(g for g in found.groups() if g).replace(",", ""))
     if rate is None and amount is None:
@@ -473,6 +484,7 @@ def parse_pkr_request(webhook_payload: dict) -> PkrRequest | None:
         text=body,
         rate=rate,
         amount=amount,
+        wants_report=bool(_FILE_WORD_RE.search(body) and _SEND_WORD_RE.search(body)),
     )
 
 

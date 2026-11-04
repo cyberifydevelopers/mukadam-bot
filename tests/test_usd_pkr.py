@@ -32,6 +32,17 @@ class Parsing(unittest.TestCase):
             self.assertIsNotNone(req, text)
             self.assertEqual((req.rate, req.amount), (rate, None), text)
 
+    def test_the_dollar_rate_is_read_however_it_is_worded(self):
+        for text, rate in [("1 usd = 280 pkr", 280.0), ("usd = 280", 280.0), ("1 dollar is 280 rupees", 280.0), ("usd to pkr 280", 280.0),
+                           ("USD/PKR 281.5", 281.5), ("dollar ka rate 280", 280.0), ("$ 280 pkr", 280.0), ("1$ = rs 280", 280.0)]:
+            req = request(text)
+            self.assertIsNotNone(req, text)
+            self.assertEqual((req.rate, req.amount), (rate, None), text)
+
+    def test_a_dollar_amount_is_not_taken_for_a_rate(self):
+        for text in ["usd 5000", "the invoice is usd 12000", "$ 25"]:
+            self.assertIsNone(request(text), text)
+
     def test_the_pkr_amount_is_read(self):
         for text, amount in [("pkr amount 1500000", 1500000.0), ("PKR 1,500,000", 1500000.0), ("rs 1500000", 1500000.0),
                              ("amount in pkr 1,400,000.50", 1400000.5)]:
@@ -227,6 +238,20 @@ class Reply(Calculations):
         self.usd_record(extra={"delivery_order": dict(USD_ORDER)}, status=InvoiceStatus.CONFIRMED)
         _, remake = self.say("pkr amount 1400000 for #20", message_id="m2")
         remake.assert_called_once()
+        self.assertEqual(stock_report.delivery_order(self.db.get(InvoiceRecord, 20))["usd_pkr_rate"], 280.0)
+
+    def test_the_report_is_made_again_even_when_only_a_rupee_amount_is_given(self):
+        self.usd_record(amount=None, extra={"delivery_order": dict(USD_ORDER)}, status=InvoiceStatus.CONFIRMED)
+        _, remake = self.say("pkr amount 1400000 for #20", message_id="m3")
+        remake.assert_called_once()  # the document has no dollar figure, so no rate can be worked out
+
+    def test_a_rate_and_share_report_in_one_message_keeps_the_rate_and_sends_that_documents_report(self):
+        self.usd_record(amount=None, extra={"delivery_order": dict(USD_ORDER)}, status=InvoiceStatus.CONFIRMED)
+        self.db.add(WhatsAppMessage(direction="out", provider="openwa", peer_number=APPROVER, text="Stock report for #20",
+                                    status="sent", message_id="wamid.REPORT", invoice_id=20))
+        self.db.commit()
+        _, remake = self.say("1 usd = 280 pkr\nShare report", quoted="wamid.REPORT", message_id="m4")
+        remake.assert_called_once()  # not report #1: the 1 of "1 usd" is no report number
         self.assertEqual(stock_report.delivery_order(self.db.get(InvoiceRecord, 20))["usd_pkr_rate"], 280.0)
 
     def test_a_reply_to_the_prompt_goes_to_that_document(self):

@@ -257,7 +257,7 @@ def _handle_pkr_request(db: Session, request: openwa_service.PkrRequest) -> dict
     db.commit()
     lines = [f"Got it for #{record.id}: *PKR {given['amount']:,.0f}*" + (f" (Rs {given['rate']:g} per dollar)." if given["rate"] else ".")
              if given["amount"] else f"Got it for #{record.id}: Rs {given['rate']:g} per dollar."]
-    remake = record.status == InvoiceStatus.CONFIRMED and stock_report.delivery_order(record) is not None and bool(given["rate"])
+    remake = (record.status == InvoiceStatus.CONFIRMED or request.wants_report) and stock_report.delivery_order(record) is not None  # a rupee amount alone (no dollar figure, so no rate) remakes it too
     lines.append("Making the stock report again in rupees…" if remake else "It goes into the sheet in rupees too once you reply YES." if record.status == InvoiceStatus.PENDING_CONFIRMATION else "")
     _send_logged(db, to, "\n".join(l for l in lines if l), record)
     db.commit()
@@ -470,11 +470,13 @@ def _handle_payload(db: Session, payload: dict) -> dict:
         _answer(db, target, reaction.answer)
         return {"status": "ok"}
 
+    # Before the pdf request and the figures: "1 usd = 280 pkr / share report" keeps the rate and then sends the report,
+    # and "usd rate 280" is not a goods rate.
+    if pkr_request := openwa_service.parse_pkr_request(payload):
+        return _handle_pkr_request(db, pkr_request)
+
     if pdf_request := openwa_service.parse_pdf_request(payload):
         return _handle_pdf_request(db, pdf_request)
-
-    if pkr_request := openwa_service.parse_pkr_request(payload):  # before figures: "usd rate 280" is not a goods rate
-        return _handle_pkr_request(db, pkr_request)
 
     if figures_request := openwa_service.parse_figures_request(payload):
         return _handle_figures_request(db, figures_request)
