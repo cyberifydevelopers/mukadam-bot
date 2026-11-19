@@ -148,10 +148,17 @@ def _documents_to_read(fetched: gmail_service.FetchedEmail) -> str | None:
     the body — saved as a text document and added to
     `fetched.attachment_paths`. Returns why the email is skipped instead, or
     None."""
-    if fetched.attachment_paths:
-        return None
     if not fetched.body_text and not fetched.image_paths:
-        return "No attachment and an empty body — nothing to read"
+        if not fetched.attachment_paths:
+            return "No attachment and an empty body — nothing to read"
+        return None
+    if fetched.attachment_paths:
+        # Has PDFs AND a non-empty body — also read the body in case it
+        # carries a forwarding note with useful bank data (e.g. a DO
+        # forwarded internally with extra instructions).
+        if _may_be_from_bank(fetched):
+            fetched.attachment_paths.append(gmail_service.save_body_document(fetched))
+        return None
     if not _may_be_from_bank(fetched):
         return "No attachment, no bank named and no pictures to check — skipped without an LLM call"
     fetched.attachment_paths = [gmail_service.save_body_document(fetched)]
@@ -396,6 +403,20 @@ def extract_document(db: Session, record: InvoiceRecord, doc: Document | None = 
         record.status = InvoiceStatus.NOT_BANK
         logger.info("%s is not a bank document — nothing sent", record.pdf_filename)
         return "not_bank"
+
+    # Email body (no-attachment email) with no actionable data — just a
+    # forwarding note or brief instruction — skip silently instead of
+    # sending a useless "No stock data found" WhatsApp prompt.
+    if doc.kind == "email":
+        has_data = (
+            extracted.amount
+            or extracted.extra.get("delivery_order")
+            or (extracted.extra.get("items_table") or {}).get("rows")
+        )
+        if not has_data:
+            record.status = InvoiceStatus.NOT_BANK
+            logger.info("%s: email body with no actionable data — skipped", record.pdf_filename)
+            return "not_bank"
 
     other = _addressed_to_other_company(extracted)
     if other:
