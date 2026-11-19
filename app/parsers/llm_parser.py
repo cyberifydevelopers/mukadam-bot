@@ -211,9 +211,11 @@ _FUNCTION = {
                     "addressed_to": {
                         "type": ["string", "null"],
                         "description": (
-                            "The company the bank's letter is addressed to — the 'To,' block under the "
-                            "REF/Date lines (e.g. 'Commander International Pvt Limited', 'MYK Associates "
-                            "(Pvt) Ltd.'), as written; null if there is none"
+                            "The company the bank's letter is addressed to — copy EXACTLY from the "
+                            "'To,' block under the REF/Date lines (e.g. 'National Cargo (Pvt) Ltd.', "
+                            "'Commander International Pvt Limited', 'MYK Associates (Pvt) Ltd.'), "
+                            "as written; null if there is none. Read this field directly from the "
+                            "document — do NOT assume it is always Commander International."
                         ),
                     },
                     "addressee_bank": {
@@ -231,8 +233,9 @@ _FUNCTION = {
                             "Find it in: the SUBJECT line ('Pledge A/C M/s. Syed Flour Mills', 'account of "
                             "Cannon Foam Industries'), or the BODY ('on behalf of our client M/s. ...', "
                             "'pledged with us by M/s. ...'). "
-                            "NEVER use the 'To:' addressee as customer_name — the 'To:' block is Commander "
-                            "International (the muccadam receiving the letter), NOT the customer. "
+                            "NEVER use the 'To:' addressee as customer_name — the 'To:' block is the "
+                            "muccadam/agent receiving the letter (e.g. 'Commander International', "
+                            "'National Cargo (Pvt) Ltd.'), NOT the customer. "
                             "NEVER use the bank's name as customer_name."
                         ),
                     },
