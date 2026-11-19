@@ -182,7 +182,7 @@ def _addressed_to_other_company(extracted: ExtractedInvoice) -> str | None:
     companies (STOCK_ADDRESSEE_NAMES); None when it is ours, undetermined, or not
     a bank-issued order (the client's own takeover request is addressed to a bank)."""
     order = extracted.extra.get("delivery_order")
-    if not order or not order.get("rows") or order.get("addressee_bank"):
+    if not order or order.get("addressee_bank"):
         return None
     addressee = (order.get("addressed_to") or "").strip()
     names = settings.stock_addressee_list
