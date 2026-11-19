@@ -189,8 +189,17 @@ _FUNCTION = {
                     "'kindly take the delivery' alone does not say which way: a GRN (goods receipt note) in the "
                     "subject, or a 'Point of Delivery' / 'Product of Istisna' / disbursement table of stock the "
                     "bank has financed, means the goods are being DELIVERED INTO our godown — quantity_received, "
-                    "never quantity_released. null for "
-                    "anything else, e.g. a collection-of-documents notice. A bank's FOLLOW-UP to an earlier delivery order — the same "
+                    "never quantity_released. IMPORTANT — L/C IMPORT WITH ENCLOSED INVOICE: when a bank letter "
+                    "(even if its heading says 'Payment Advice' or 'L/C Advice') mentions 'Release of goods', "
+                    "'delivery of goods', 'kindly arrange receipt', or 'goods to be received / placed under "
+                    "muccadam control', AND the file also contains an enclosed commercial invoice or bill of "
+                    "lading with the goods details — fill delivery_order using those enclosed documents for the "
+                    "goods rows (quantity_received = the shipped / invoice quantity, e.g. '20 DRUM' or "
+                    "'1800.000 MT'). The customer_name is the buyer on the commercial invoice (the client whose "
+                    "goods Commander is receiving). Do NOT leave delivery_order null just because the main "
+                    "letter is titled 'Payment Advice' — look at its PURPOSE / subject line too. null only for "
+                    "a plain collection-of-documents notice with no release/delivery instruction. "
+                    "A bank's FOLLOW-UP to an earlier delivery order — the same "
                     "reference, now giving the missing figures (rate, margin %, drums, weight) — is filled in too, with its goods "
                     "and those figures per line. The same goes for a bank's PLEDGE-SITE / MUCCADAM APPOINTMENT table (columns such as "
                     "Name of Borrower, Location of Site, Margin, Approved Commodities, Proposed New Muccadam): it gives the MARGIN "
@@ -216,7 +225,16 @@ _FUNCTION = {
                     },
                     "customer_name": {
                         "type": ["string", "null"],
-                        "description": "The client whose stock it is (who pledged it), e.g. 'Canon Foam Industries (PVT) Ltd', as written",
+                        "description": (
+                            "The BORROWER / PLEDGE HOLDER — the bank's client whose goods are under pledge "
+                            "(e.g. 'Canon Foam Industries (PVT) Ltd', 'Syed Flour Mills', 'M/s. ABC Company'). "
+                            "Find it in: the SUBJECT line ('Pledge A/C M/s. Syed Flour Mills', 'account of "
+                            "Cannon Foam Industries'), or the BODY ('on behalf of our client M/s. ...', "
+                            "'pledged with us by M/s. ...'). "
+                            "NEVER use the 'To:' addressee as customer_name — the 'To:' block is Commander "
+                            "International (the muccadam receiving the letter), NOT the customer. "
+                            "NEVER use the bank's name as customer_name."
+                        ),
                     },
                     "pledge_location": {
                         "type": ["string", "null"],
@@ -257,7 +275,11 @@ _FUNCTION = {
                             "for an L/C letter, one line per kind of goods, with the quantity actually "
                             "shipped under THIS L/C (its bill of lading / the invoice's shipped quantity, "
                             "e.g. '1,800.000 MT') as quantity_received — not the L/C's maximum ('2000 MT "
-                            "minus 10 pct') and not a whole vessel's total from a surveyor's certificate"
+                            "minus 10 pct') and not a whole vessel's total from a surveyor's certificate. "
+                            "CRITICAL — SCANNED DOCUMENTS: copy the goods description EXACTLY as it appears "
+                            "in the table — do NOT substitute or invent goods names from your own knowledge "
+                            "(e.g. if the table says 'Wheat Bags 50Kgs', write 'Wheat Bags 50Kgs', never "
+                            "'Soyabean Oil' or any other commodity). Read the table cell by cell."
                         ),
                         "items": {
                             "type": "object",

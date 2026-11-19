@@ -17,7 +17,11 @@ _USD = {"USD", "US$", "$", "US DOLLAR", "US DOLLARS", "DOLLAR", "DOLLARS"}
 
 
 def is_usd(extra: dict | None) -> bool:
-    return ((extra or {}).get("currency") or "").strip().upper() in _USD
+    top = ((extra or {}).get("currency") or "").strip().upper()
+    if top in _USD:
+        return True
+    do_currency = (((extra or {}).get("delivery_order") or {}).get("currency") or "").strip().upper()
+    return do_currency in _USD
 
 
 def number(text) -> float | None:

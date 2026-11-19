@@ -66,12 +66,15 @@ class Settings(BaseSettings):
     # LLM-first extraction (default parser for any registered bank that
     # doesn't yet have a hand-written rule-based parser — see bank_registry.py).
     # Routed through OpenRouter (OpenAI-compatible API) so llm_extraction_model
-    # can point at any model OpenRouter serves, e.g. "anthropic/claude-sonnet-4.5".
+    # can point at any model OpenRouter serves. Now using OpenAI models.
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    llm_extraction_model: str = "anthropic/claude-sonnet-4.5"
-    # Tried once when the model above fails for a retryable reason (busy / provider down). Sonnet only; "" turns it off.
-    llm_fallback_model: str = "anthropic/claude-sonnet-4.5"
+    # --- Claude (disabled, switched to OpenAI) ---
+    # llm_extraction_model: str = "anthropic/claude-sonnet-4.5"
+    # llm_fallback_model: str = "anthropic/claude-sonnet-4.5"
+    llm_extraction_model: str = "openai/gpt-4o"
+    # Tried once when the model above fails for a retryable reason (busy / provider down); "" turns it off.
+    llm_fallback_model: str = "openai/gpt-4o"
 
     # WhatsApp Cloud API
     whatsapp_phone_number_id: str = ""
