@@ -79,7 +79,10 @@
       "Bash(env -u PYTHONPATH -u PYTHONHOME -u VIRTUAL_ENV \"/c/Program Files/LibreOffice/program/python.exe\" app/services/stock_report_uno.py data/stock_reports/manual/job.json)",
       "Bash(venv/Scripts/python -m py_compile app/services/stock_report.py app/services/stock_report_uno.py app/parsers/llm_parser.py)",
       "Bash(PYTHONIOENCODING=utf-8 venv/Scripts/python __TRACKED_VAR__/try_prompt.py ./data/stock_reports_test 'data/pdfs/1a11b383e2c2f9ff_PDF file_2026-09-21_10.PDF')",
-      "Bash(sed -n '/^delivery_order/,$p')"
+      "Bash(sed -n '/^delivery_order/,$p')",
+      "Bash(dir \"C:\\\\Users\\\\Cyberify\\\\Downloads\\\\fwdfwdosyedflourmillkawishseedcoreporationaccur\")",
+      "PowerShell(Add-Type -AssemblyName System.IO.Compression.FileSystem; $zip = [System.IO.Compression.ZipFile]::OpenRead\\(\"C:\\\\Users\\\\Cyberify\\\\Downloads\\\\fwdfwdosyedflourmillkawishseedcoreporationaccur.zip\"\\); $zip.Entries | Select-Object FullName, Length; $zip.Dispose\\(\\))",
+      "Bash(git push *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Cyberify\\AppData\\Local\\Temp\\claude\\c--Users-Cyberify-Desktop-mukadam-bot\\62e55f15-87e7-4fd3-9b72-a5c1276eaeba\\scratchpad\\reports\\9999"
