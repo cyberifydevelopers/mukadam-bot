@@ -142,19 +142,19 @@ def _may_be_from_bank(fetched: gmail_service.FetchedEmail) -> bool:
 
 
 def _documents_to_read(fetched: gmail_service.FetchedEmail) -> str | None:
-    """Decides what the graph reads for this email. Attachments when it has
-    any; otherwise the email itself (text + pictures) — many bank
-    instructions arrive as plain (often forwarded) emails with the details in
-    the body — saved as a text document and added to
-    `fetched.attachment_paths`. Returns why the email is skipped instead, or
-    None."""
-    if fetched.attachment_paths:
-        return None
-    if not fetched.body_text and not fetched.image_paths:
+    """Decides what the graph reads for this email. Always processes every
+    document attached (PDF / Excel / DOCX). Additionally processes the email
+    body when it may itself be a bank document — many DOs and L/C letters
+    arrive as plain or forwarded emails (sometimes with stripped attachments).
+    Returns a skip reason when there is truly nothing to read, or None."""
+    if not fetched.body_text and not fetched.image_paths and not fetched.attachment_paths:
         return "No attachment and an empty body — nothing to read"
-    if not _may_be_from_bank(fetched):
+    # Include the body as a document when the email is from a bank — it may
+    # carry a DO / L/C text in the forwarded chain even alongside attachments.
+    if fetched.body_text and _may_be_from_bank(fetched):
+        fetched.attachment_paths.append(gmail_service.save_body_document(fetched))
+    if not fetched.attachment_paths:
         return "No attachment, no bank named and no pictures to check — skipped without an LLM call"
-    fetched.attachment_paths = [gmail_service.save_body_document(fetched)]
     return None
 
 

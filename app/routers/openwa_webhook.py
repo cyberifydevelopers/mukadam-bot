@@ -257,7 +257,9 @@ def _handle_pkr_request(db: Session, request: openwa_service.PkrRequest) -> dict
     db.commit()
     lines = [f"Got it for #{record.id}: *PKR {given['amount']:,.0f}*" + (f" (Rs {given['rate']:g} per dollar)." if given["rate"] else ".")
              if given["amount"] else f"Got it for #{record.id}: Rs {given['rate']:g} per dollar."]
-    remake = (record.status == InvoiceStatus.CONFIRMED or request.wants_report) and stock_report.delivery_order(record) is not None  # a rupee amount alone (no dollar figure, so no rate) remakes it too
+    # For confirmed delivery orders, always remake. For explicit "send the report" requests, always
+    # try — _send_stock_report handles non-delivery-order records gracefully with a message.
+    remake = (record.status == InvoiceStatus.CONFIRMED and stock_report.delivery_order(record) is not None) or request.wants_report
     lines.append("Making the stock report again in rupees…" if remake else "It goes into the sheet in rupees too once you reply YES." if record.status == InvoiceStatus.PENDING_CONFIRMATION else "")
     _send_logged(db, to, "\n".join(l for l in lines if l), record)
     db.commit()

@@ -23,6 +23,7 @@ Differences from the Meta path that shape this module:
 import base64
 import hashlib
 import hmac
+import json
 import logging
 import os
 import re
@@ -433,31 +434,90 @@ def parse_question(webhook_payload: dict) -> Question | None:
     )
 
 
-# "usd rate 280", "dollar rate is 280", "$ rate = 281.5", "1 usd = 280"
+# Used by parse_pdf_request to strip USD expressions before looking for a report-label number
+# (so "1" in "1 usd = 280" is never mistaken for a report number).
 _USD_RATE_RE = re.compile(
-    r"(?:\b(?:usd|us\s*dollars?|dollars?)\b|\$)\s*(?:ka\s*)?(?:to\s*pkr\s*)?rate\s*(?:is|=|:)?\s*(?:rs\.?|pkr)?\s*(\d+(?:\.\d+)?)"
-    r"|\b1\s*(?:usd|dollar|\$)\s*=\s*(?:rs\.?|pkr)?\s*(\d+(?:\.\d+)?)",
+    r"(?:\b(?:usd|us\s*dollars?|dollars?)\b|\$)\s*(?:ka\s*)?(?:to\s*pkr\s*)?rate\s*(?:is|=|:)?\s*(?:rs\.?|pkr)?\s*\d+(?:\.\d+)?"
+    r"|\b1\s*(?:usd|dollar|\$)\s*\S+\s*(?:rs\.?|pkr)?\s*\d+(?:\.\d+)?",
     re.IGNORECASE,
 )
-# The same rate said loosely: "usd = 280", "1 dollar is 280 rupees", "usd to pkr 280", "usd/pkr 280", "dollar 280 pkr",
-# "dollar ka rate 280". Only taken for a believable rate (RATE_RANGE), so "usd is 5000" about an amount isn't one.
 _USD_LOOSE_RE = re.compile(
     r"(?:\b1\s*)?(?:\busd\b|\bus\s*dollars?\b|\bdollars?\b|\$)\s*(?:ka\s*rate\s*)?"
-    r"(?:(?:=|:|-|is|equals?|to\s*pkr|/\s*pkr)\s*)?(?:=\s*)?(?:rs\.?\s*|pkr\s*|rupees?\s*)?(\d+(?:\.\d+)?)\s*(?:pkr|rs\b|rupees?)?",
+    r"(?:(?:=|:|-|is|equals?|to\s*pkr|/\s*pkr)\s*)?(?:=\s*)?(?:rs\.?\s*|pkr\s*|rupees?\s*)?\d+(?:\.\d+)?\s*(?:pkr|rs\b|rupees?)?",
     re.IGNORECASE,
 )
-_RATE_RANGE = (50, 1000)
-# "pkr amount 1500000", "amount in pkr 1,500,000", "pkr 1500000", "rs 1500000"
-_PKR_AMOUNT_RE = re.compile(
-    r"^\W*(?:pkr|rs\.?|rupees?)\s*(?:amount|total)?\s*(?:is|=|:)?\s*(\d[\d,]*(?:\.\d+)?)\W*(?:(?:for|of)?\s*(?:#|report|record|order)\s*#?\s*\d+)?\W*$"
-    r"|\bamount\s*(?:in\s*)?(?:pkr|rs\.?|rupees?)\s*(?:is|=|:)?\s*(\d[\d,]*(?:\.\d+)?)",
-    re.IGNORECASE,
-)
+
+_PKR_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "record_pkr",
+        "description": "Record the exchange rate or PKR amount found in the message.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "is_pkr_message": {
+                    "type": "boolean",
+                    "description": "True only when this message explicitly states a USD-to-PKR rate or a total PKR amount.",
+                },
+                "rate": {
+                    "type": ["number", "null"],
+                    "description": "PKR per 1 USD (e.g. 280 for '1 USD = PKR 280'). Null when not stated.",
+                },
+                "amount_pkr": {
+                    "type": ["number", "null"],
+                    "description": "Total PKR amount in full (e.g. 10920000). Null when not stated.",
+                },
+                "wants_report": {
+                    "type": "boolean",
+                    "description": "True when the message also asks to send, share, or regenerate the stock report or PDF.",
+                },
+            },
+            "required": ["is_pkr_message", "rate", "amount_pkr", "wants_report"],
+        },
+    },
+}
+
+
+def _extract_pkr_via_llm(body: str) -> dict | None:
+    """LLM-based extraction — works for any phrasing, language (English / Urdu / Hinglish), or bank email format.
+    Returns {rate, amount, wants_report} or None when the message is not a PKR rate/amount message."""
+    from app.parsers import llm_parser  # late import — heavy module
+    try:
+        client = llm_parser.openrouter_client()
+        resp = llm_parser.chat_with_fallback(
+            client,
+            temperature=0,
+            max_tokens=120,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You extract a USD-to-PKR exchange rate or PKR amount from a short message. "
+                        "The message is from a bank official, an approver, or a trade contact and may be "
+                        "in English, Urdu, or Hinglish. Call record_pkr with what you find."
+                    ),
+                },
+                {"role": "user", "content": body},
+            ],
+            tools=[_PKR_TOOL],
+            tool_choice={"type": "function", "function": {"name": "record_pkr"}},
+        )
+        args = json.loads(resp.choices[0].message.tool_calls[0].function.arguments)
+        if not args.get("is_pkr_message"):
+            return None
+        return {
+            "rate": args.get("rate"),
+            "amount": args.get("amount_pkr"),
+            "wants_report": bool(args.get("wants_report")),
+        }
+    except Exception:
+        logger.exception("PKR LLM extraction failed; treating as no-match")
+        return None
 
 
 def parse_pkr_request(webhook_payload: dict) -> PkrRequest | None:
-    """The approver's answer to "this is in USD — send the PKR amount": "usd rate 280" or "pkr amount 1500000" (as a
-    reply to the prompt, or naming the document with "#12"). None for anything else, and for a question."""
+    """The approver's (or bank's) answer to "this is in USD — send the PKR amount".
+    Uses LLM extraction so any phrasing, language, or bank email format is accepted."""
     if webhook_payload.get("event") != "message.received":
         return None
     data = webhook_payload.get("data") or {}
@@ -466,14 +526,10 @@ def parse_pkr_request(webhook_payload: dict) -> PkrRequest | None:
     body = (data.get("body") or "").strip()
     if not body or looks_like_question(body):
         return None
-    rate = amount = None
-    if found := _USD_RATE_RE.search(body):
-        rate = float(next(g for g in found.groups() if g))
-    elif (found := _USD_LOOSE_RE.search(body)) and _RATE_RANGE[0] <= float(found.group(1)) <= _RATE_RANGE[1]:
-        rate = float(found.group(1))
-    elif found := _PKR_AMOUNT_RE.search(body):
-        amount = float(next(g for g in found.groups() if g).replace(",", ""))
-    if rate is None and amount is None:
+    if not re.search(r"\d", body):  # cheap pre-filter: a rate/amount always has a digit
+        return None
+    extracted = _extract_pkr_via_llm(body)
+    if not extracted:
         return None
     label = _REPORT_LABEL_RE.search(body)
     return PkrRequest(
@@ -482,9 +538,9 @@ def parse_pkr_request(webhook_payload: dict) -> PkrRequest | None:
         target_label=label.group(1) if label else None,
         message_id=data.get("id", ""),
         text=body,
-        rate=rate,
-        amount=amount,
-        wants_report=bool(_FILE_WORD_RE.search(body) and _SEND_WORD_RE.search(body)),
+        rate=extracted["rate"],
+        amount=extracted["amount"],
+        wants_report=extracted["wants_report"],
     )
 
 
