@@ -211,10 +211,14 @@ def _addressed_to_other_company(extracted: ExtractedInvoice) -> str | None:
         return None
     addressee = (order.get("addressed_to") or "").strip()
     names = settings.stock_addressee_list
-    if not addressee or not names:
+    if not names:
         return None
-    norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())
-    return None if any(norm(n) in norm(addressee) for n in names) else addressee
+    if addressee:
+        norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())
+        return None if any(norm(n) in norm(addressee) for n in names) else addressee
+    # addressed_to is null (common for scanned PDFs) — only allow when the LLM
+    # explicitly confirmed the document concerns our company; anything else is skipped.
+    return None if extracted.extra.get("concerns_our_company") is True else "addressee not found in document"
 
 
 def _sender_not_allowed(db: Session, fetched: gmail_service.FetchedEmail) -> str | None:
