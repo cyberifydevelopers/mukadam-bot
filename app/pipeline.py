@@ -18,7 +18,7 @@ from datetime import datetime
 from googleapiclient.errors import HttpError
 from sqlalchemy.orm import Session, object_session
 
-from app.bank_registry import BANK_EMAIL_DOMAINS, BANK_REGISTRY, BankProfile, bank_identity, profile_by_code, resolve_bank
+from app.bank_registry import BANK_EMAIL_DOMAINS, BANK_REGISTRY, BankProfile, bank_identity, profile_by_code
 from app.config import settings
 from app.formatting import amount_line, enclosed_documents, format_items
 from app.services import pkr
@@ -234,28 +234,6 @@ def _sender_not_allowed(db: Session, fetched: gmail_service.FetchedEmail) -> str
     return f"Sender {', '.join(senders[:2]) or fetched.sender} is not in the CAD list — skipped"
 
 
-def _from_cad_sender(db: Session, record: InvoiceRecord) -> bool:
-    """True when the email that produced this record came from a known CAD contact.
-    Documents from CAD contacts are trusted and processed regardless of bank letterhead."""
-    contacts = [c.address for c in db.query(CadContact).all()]
-    if not contacts:
-        return False
-    try:
-        senders = json.loads(record.email.chain_senders or "[]")
-    except (json.JSONDecodeError, AttributeError):
-        senders = [record.email.sender] if record.email and record.email.sender else []
-    return any(s == c or (c.startswith("@") and s.endswith(c)) for s in senders for c in contacts)
-
-
-def _bank_mentioned_in_doc(doc: Document) -> bool:
-    """True when the word 'bank' or a registered bank name appears anywhere in
-    the document text — a client letter or invoice addressed to a bank counts."""
-    text = (doc.text or "").lower()
-    if not text:
-        return False
-    return "bank" in text or any(p.display_name.lower() in text for p in BANK_REGISTRY)
-
-
 def _process_one_message(db: Session, message_id: str, notification: tuple[datetime, datetime] | None = None) -> int:
     """`notification` = (published_at, received_at) of the Pub/Sub message
     that triggered this sync, kept on the email for the latency breakdown."""
@@ -457,28 +435,9 @@ def extract_document(db: Session, record: InvoiceRecord, doc: Document | None = 
         return "merged"
 
     if not _is_bank(extracted):
-        # Accept from trusted CAD senders regardless of letterhead.
-        from_cad = _from_cad_sender(db, record)
-        # Accept when a bank name appears anywhere in the document content.
-        bank_in_doc = _bank_mentioned_in_doc(doc)
-        if from_cad or bank_in_doc:
-            reason = "CAD sender" if from_cad else "bank name mentioned in document"
-            logger.info("%s: %s — processing as bank-related", record.pdf_filename, reason)
-            # Try to infer the bank from the sender when LLM didn't find one.
-            if not extracted.extra.get("bank_name") and from_cad and record.email:
-                try:
-                    senders = json.loads(record.email.chain_senders or "[]")
-                except (json.JSONDecodeError, AttributeError):
-                    senders = [record.email.sender] if record.email.sender else []
-                for s in senders:
-                    profile = resolve_bank(s)
-                    if profile and profile.bank_code != "UNKNOWN":
-                        _set_bank(record, profile.display_name)
-                        break
-        else:
-            record.status = InvoiceStatus.NOT_BANK
-            logger.info("%s is not a bank document — nothing sent", record.pdf_filename)
-            return "not_bank"
+        record.status = InvoiceStatus.NOT_BANK
+        logger.info("%s is not a bank document — nothing sent", record.pdf_filename)
+        return "not_bank"
 
     # Email body (no-attachment email) with no actionable data — just a
     # forwarding note or brief instruction — skip silently instead of
