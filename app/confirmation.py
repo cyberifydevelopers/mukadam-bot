@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.formatting import amount_line
 from app.models import InvoiceRecord, InvoiceStatus, StatementTransaction
+from app.services import goods_profiles
 from app.services.sheets_service import append_confirmed_invoice, append_confirmed_transactions
 
 Confirmable = InvoiceRecord | StatementTransaction
@@ -103,6 +104,9 @@ def apply_answer(db: Session, target: Confirmable, answer: str) -> str | None:
             ack = f"Saved {target.label} to the {target.bank_code} Transactions sheet."
         else:
             append_confirmed_invoice(target)
+            # Save any goods figures (weight, rate, margin) from this document so they
+            # appear on the Factories page and are reused on future DOs for the same goods.
+            _remember_goods(target)
             ack = _saved_invoice_text(target)
     else:
         target.status = InvoiceStatus.REJECTED
@@ -110,3 +114,15 @@ def apply_answer(db: Session, target: Confirmable, answer: str) -> str | None:
 
     db.add(target)
     return ack
+
+
+def _remember_goods(record: InvoiceRecord) -> None:
+    """Auto-save any goods figures (weight, rate, margin) from a confirmed document to the
+    factory profiles so they show on the Factories page and are reused on future DOs."""
+    try:
+        extra = json.loads(record.raw_extracted_json or "{}")
+        order = extra.get("delivery_order")
+        if order and order.get("rows"):
+            goods_profiles.remember(order)
+    except Exception:
+        pass
