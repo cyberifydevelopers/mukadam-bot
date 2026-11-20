@@ -449,6 +449,18 @@ def extract_document(db: Session, record: InvoiceRecord, doc: Document | None = 
             logger.info("%s: email body with no actionable data — skipped", record.pdf_filename)
             return "not_bank"
 
+    # Scanned PDFs have no text layer so _company_absent_from_doc() can't run
+    # pre-LLM. Use the LLM's own concerns_our_company verdict instead — it now
+    # always knows our company name (via _our_company_note()).
+    if doc.kind == "pdf_scanned" and extracted.extra.get("concerns_our_company") is False:
+        names = settings.stock_addressee_list
+        reason = f"Not addressed to {names[0] if names else 'our company'} — skipped"
+        extracted.extra["classification_reason"] = reason
+        record.raw_extracted_json = json.dumps({**json.loads(record.raw_extracted_json), "classification_reason": reason, "not_ours": True})
+        record.status = InvoiceStatus.NOT_BANK
+        logger.info("%s: %s", record.pdf_filename, reason)
+        return "not_bank"
+
     other = _addressed_to_other_company(extracted)
     if other:
         reason = f"Addressed to {other}, not {settings.stock_addressee_list[0]} — not ours, skipped"

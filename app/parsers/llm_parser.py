@@ -375,9 +375,10 @@ _EXTRA_FIELDS = ("issuer_name", "issuer_is_bank", "classification_reason", "docu
 
 
 def _our_company_note() -> str:
-    """Tells the model who 'our company' is (OUR_COMPANY_NAMES), for
-    concerns_our_company — it's a check, not a reason to reject."""
-    names = settings.our_company_list
+    """Tells the model who 'our company' is, for concerns_our_company.
+    Falls back to STOCK_ADDRESSEE_NAMES when OUR_COMPANY_NAMES is not set,
+    so scanned PDFs addressed to other muccadams are caught via concerns_our_company."""
+    names = settings.our_company_list or settings.stock_addressee_list
     if not names:
         return ""
     return f"\n\nOur company (for concerns_our_company): {', '.join(names)}.\n\n"
