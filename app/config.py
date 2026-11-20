@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     llm_extraction_model: str = "anthropic/claude-sonnet-4.5"
-    # Tried once when the model above fails for a retryable reason (busy / provider down); "" turns it off.
+    # Tried once when the model above fails for a retryable reason (busy / provider down). Sonnet only; "" turns it off.
     llm_fallback_model: str = "anthropic/claude-sonnet-4.5"
 
     # WhatsApp Cloud API

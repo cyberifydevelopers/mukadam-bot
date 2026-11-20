@@ -352,7 +352,8 @@ def parse_reply(webhook_payload: dict) -> TextReply | None:
 
 def parse_pdf_request(webhook_payload: dict) -> PdfRequest | None:
     """A message asking for a report's files ("Share pdf for 496", "send report 496"): the stock report's PDF and
-    Excel, or with "original" the document as it arrived. None for anything else."""
+    Excel, or with "original" the document as it arrived. None for anything else, and for a request that names
+    nothing — no number and not sent as a reply to one of the bot's messages."""
     if webhook_payload.get("event") != "message.received":
         return None
     data = webhook_payload.get("data") or {}
@@ -366,6 +367,8 @@ def parse_pdf_request(webhook_payload: dict) -> PdfRequest | None:
     found = _LABEL_NUMBER_RE.search(_USD_LOOSE_RE.sub(" ", _USD_RATE_RE.sub(" ", body)))  # the 1 of "1 usd = 280" is no report number
     label = found.group(1) if found else None
     quoted = (data.get("quotedMessage") or {}).get("id")
+    if not label and not quoted:
+        return None
     return PdfRequest(
         sender_phone=_sender_phone(data),
         target_label=label.upper() if label else None,

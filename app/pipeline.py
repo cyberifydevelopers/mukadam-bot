@@ -148,17 +148,10 @@ def _documents_to_read(fetched: gmail_service.FetchedEmail) -> str | None:
     the body — saved as a text document and added to
     `fetched.attachment_paths`. Returns why the email is skipped instead, or
     None."""
-    if not fetched.body_text and not fetched.image_paths:
-        if not fetched.attachment_paths:
-            return "No attachment and an empty body — nothing to read"
-        return None
     if fetched.attachment_paths:
-        # Has PDFs AND a non-empty body — also read the body in case it
-        # carries a forwarding note with useful bank data (e.g. a DO
-        # forwarded internally with extra instructions).
-        if _may_be_from_bank(fetched):
-            fetched.attachment_paths.append(gmail_service.save_body_document(fetched))
         return None
+    if not fetched.body_text and not fetched.image_paths:
+        return "No attachment and an empty body — nothing to read"
     if not _may_be_from_bank(fetched):
         return "No attachment, no bank named and no pictures to check — skipped without an LLM call"
     fetched.attachment_paths = [gmail_service.save_body_document(fetched)]
@@ -184,41 +177,19 @@ def _accept_takeover_request(extracted: ExtractedInvoice) -> None:
         extracted.extra["issuer_is_bank"] = True
 
 
-def _company_absent_from_doc(doc: Document) -> str | None:
-    """Returns a skip-reason when none of our company names (STOCK_ADDRESSEE_NAMES)
-    appears anywhere in the document text — meaning the bank sent a document
-    intended for a different firm. Returns None (allow) when a name is found,
-    when no names are configured, or when the document has no text layer (scanned
-    PDFs — those fall through to the LLM which checks via concerns_our_company).
-    Email bodies are exempt: a bank email addressed TO us rarely names us in its
-    body, so the sender/CAD filter and the LLM handle those instead."""
-    names = settings.stock_addressee_list
-    if not names or doc.text is None or doc.kind == "email":
-        return None
-    norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())
-    normed = norm(doc.text)
-    if any(norm(n) in normed for n in names):
-        return None
-    return f"'{names[0]}' not found in the document — appears addressed to a different company, skipped"
-
-
 def _addressed_to_other_company(extracted: ExtractedInvoice) -> str | None:
     """The addressee of a bank's delivery order when it isn't one of our muccadam
     companies (STOCK_ADDRESSEE_NAMES); None when it is ours, undetermined, or not
     a bank-issued order (the client's own takeover request is addressed to a bank)."""
     order = extracted.extra.get("delivery_order")
-    if not order or order.get("addressee_bank"):
+    if not order or not order.get("rows") or order.get("addressee_bank"):
         return None
     addressee = (order.get("addressed_to") or "").strip()
     names = settings.stock_addressee_list
-    if not names:
+    if not addressee or not names:
         return None
-    if addressee:
-        norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())
-        return None if any(norm(n) in norm(addressee) for n in names) else addressee
-    # addressed_to is null (common for scanned PDFs) — only allow when the LLM
-    # explicitly confirmed the document concerns our company; anything else is skipped.
-    return None if extracted.extra.get("concerns_our_company") is True else "addressee not found in document"
+    norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())
+    return None if any(norm(n) in norm(addressee) for n in names) else addressee
 
 
 def _sender_not_allowed(db: Session, fetched: gmail_service.FetchedEmail) -> str | None:
@@ -367,27 +338,14 @@ def extract_document(db: Session, record: InvoiceRecord, doc: Document | None = 
         _set_bank(record, _bank_in_text(doc.text))
         return _skip_statement(record)
 
-    # Pre-LLM gate: skip documents that don't mention our company at all.
-    # Banks sometimes accidentally include another firm's documents in the
-    # same email; a document for us always contains our name somewhere.
-    # Scanned PDFs (no text layer) are exempt — the LLM reads their pages.
-    not_ours = _company_absent_from_doc(doc)
-    if not_ours:
-        record.raw_extracted_json = json.dumps({"classification_reason": not_ours, "not_ours": True})
-        record.status = InvoiceStatus.NOT_BANK
-        logger.info("%s: %s", record.pdf_filename, not_ours)
-        return "not_bank"
-
     try:
         if doc.kind == "pdf_scanned":
             extracted: ExtractedInvoice = _DEFAULT_LLM_PARSER.parse_from_pdf_bytes(doc.pdf_bytes)
         elif doc.kind == "email":
             extracted = _DEFAULT_LLM_PARSER.parse_email(doc.text, doc.image_paths)
-            if not extracted.extra.get("bank_name") and not extracted.extra.get("is_bank_document"):
-                # No bank name AND the LLM itself didn't flag it as a bank document —
-                # bank-sounding wording alone isn't enough. But if the LLM returned
-                # is_bank_document=True (e.g. it found a bank domain/signature), trust it
-                # even when bank_name wasn't extracted into the field.
+            if not extracted.extra.get("bank_name"):
+                # An email counts only when the bank itself can be named
+                # (domain, signature, logo) — bank-sounding wording isn't enough.
                 extracted.extra["is_bank_document"] = False
         else:
             extracted = _DEFAULT_LLM_PARSER.parse(doc.text, doc.image_paths)
@@ -437,32 +395,6 @@ def extract_document(db: Session, record: InvoiceRecord, doc: Document | None = 
     if not _is_bank(extracted):
         record.status = InvoiceStatus.NOT_BANK
         logger.info("%s is not a bank document — nothing sent", record.pdf_filename)
-        return "not_bank"
-
-    # Email body (no-attachment email) with no actionable data — just a
-    # forwarding note or brief instruction — skip silently instead of
-    # sending a useless "No stock data found" WhatsApp prompt.
-    if doc.kind == "email":
-        has_data = (
-            extracted.amount
-            or extracted.extra.get("delivery_order")
-            or (extracted.extra.get("items_table") or {}).get("rows")
-        )
-        if not has_data:
-            record.status = InvoiceStatus.NOT_BANK
-            logger.info("%s: email body with no actionable data — skipped", record.pdf_filename)
-            return "not_bank"
-
-    # Scanned PDFs have no text layer so _company_absent_from_doc() can't run
-    # pre-LLM. Use the LLM's own concerns_our_company verdict instead — it now
-    # always knows our company name (via _our_company_note()).
-    if doc.kind == "pdf_scanned" and extracted.extra.get("concerns_our_company") is False:
-        names = settings.stock_addressee_list
-        reason = f"Not addressed to {names[0] if names else 'our company'} — skipped"
-        extracted.extra["classification_reason"] = reason
-        record.raw_extracted_json = json.dumps({**json.loads(record.raw_extracted_json), "classification_reason": reason, "not_ours": True})
-        record.status = InvoiceStatus.NOT_BANK
-        logger.info("%s: %s", record.pdf_filename, reason)
         return "not_bank"
 
     other = _addressed_to_other_company(extracted)

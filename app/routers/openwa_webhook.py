@@ -298,10 +298,7 @@ def _handle_pdf_request(db: Session, request: openwa_service.PdfRequest) -> dict
 
     asked = f"#{request.target_label}" if request.target_label else "that message"
     if record is None:
-        if not request.target_label and not request.quoted_message_id:
-            _send_logged(db, request.sender_phone, "Which report? Say e.g. \"share report 3\" or reply to the report's message.", None)
-        else:
-            _send_logged(db, request.sender_phone, f"I couldn't find {asked}.", None)
+        _send_logged(db, request.sender_phone, f"I couldn't find {asked}.", None)
         db.commit()
         return {"status": "ok"}
 
@@ -415,16 +412,9 @@ def _answer(db: Session, target: Confirmable, answer: str) -> None:
     if ack is not None:
         _acknowledge(db, target, answer, ack)
         db.commit()
-        if answer == "yes" and isinstance(target, InvoiceRecord):
-            if stock_report.delivery_order(target):
-                _send_stock_report(db, target)
-                db.commit()
-            elif pkr.needed(target):
-                # USD document saved but PKR amount still unknown — remind once after YES
-                extra = json.loads(target.raw_extracted_json or "{}")
-                reminder = "\n".join(pkr.prompt_lines(target, extra))
-                _send_logged(db, target.whatsapp_to_number, reminder, target)
-                db.commit()
+        if answer == "yes" and isinstance(target, InvoiceRecord) and stock_report.delivery_order(target):
+            _send_stock_report(db, target)
+            db.commit()
 
 
 # Deliveries are handled one at a time: OpenWA re-sends a webhook it

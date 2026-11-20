@@ -61,18 +61,12 @@ _FUNCTION = {
             "is_bank_document": {
                 "type": "boolean",
                 "description": (
-                    "True if the document (or the main/first page in a multi-document file) was "
-                    "ISSUED BY A BANK — on the bank's own letterhead (payment advice, transfer "
-                    "receipt, deposit slip, bank challan, remittance advice, delivery order, L/C "
-                    "or guarantee document, bank letter, statement). "
-                    "MULTI-DOCUMENT FILES: when a bank letter is on page 1 and trade documents "
-                    "(bill of lading, commercial invoice, packing list, certificates) follow as "
-                    "enclosures, classify as True — the bank letter is the issuing document; the "
-                    "enclosed trade documents do NOT change this to False. "
-                    "False only when NO page in the file is from a bank — e.g. a standalone "
-                    "company invoice, a client's request letter on their own letterhead (unless "
-                    "it is a Pledge Stock Takeover request, which goes in delivery_order), a "
-                    "quotation, or a CV."
+                    "True only if the document was ISSUED BY A BANK — on the bank's own letterhead "
+                    "(payment advice, transfer receipt, deposit slip, bank challan, remittance "
+                    "advice, delivery order, L/C or guarantee document, bank letter, statement). "
+                    "False when it is issued by anyone else, EVEN IF it is addressed to a bank or "
+                    "mentions a bank — e.g. a customer's request letter to a bank on the "
+                    "customer's own letterhead, a company invoice, a quotation, a CV."
                 ),
             },
             "classification_reason": {
@@ -195,17 +189,8 @@ _FUNCTION = {
                     "'kindly take the delivery' alone does not say which way: a GRN (goods receipt note) in the "
                     "subject, or a 'Point of Delivery' / 'Product of Istisna' / disbursement table of stock the "
                     "bank has financed, means the goods are being DELIVERED INTO our godown — quantity_received, "
-                    "never quantity_released. IMPORTANT — L/C IMPORT WITH ENCLOSED INVOICE: when a bank letter "
-                    "(even if its heading says 'Payment Advice' or 'L/C Advice') mentions 'Release of goods', "
-                    "'delivery of goods', 'kindly arrange receipt', or 'goods to be received / placed under "
-                    "muccadam control', AND the file also contains an enclosed commercial invoice or bill of "
-                    "lading with the goods details — fill delivery_order using those enclosed documents for the "
-                    "goods rows (quantity_received = the shipped / invoice quantity, e.g. '20 DRUM' or "
-                    "'1800.000 MT'). The customer_name is the buyer on the commercial invoice (the client whose "
-                    "goods Commander is receiving). Do NOT leave delivery_order null just because the main "
-                    "letter is titled 'Payment Advice' — look at its PURPOSE / subject line too. null only for "
-                    "a plain collection-of-documents notice with no release/delivery instruction. "
-                    "A bank's FOLLOW-UP to an earlier delivery order — the same "
+                    "never quantity_released. null for "
+                    "anything else, e.g. a collection-of-documents notice. A bank's FOLLOW-UP to an earlier delivery order — the same "
                     "reference, now giving the missing figures (rate, margin %, drums, weight) — is filled in too, with its goods "
                     "and those figures per line. The same goes for a bank's PLEDGE-SITE / MUCCADAM APPOINTMENT table (columns such as "
                     "Name of Borrower, Location of Site, Margin, Approved Commodities, Proposed New Muccadam): it gives the MARGIN "
@@ -217,11 +202,9 @@ _FUNCTION = {
                     "addressed_to": {
                         "type": ["string", "null"],
                         "description": (
-                            "The company the bank's letter is addressed to — copy EXACTLY from the "
-                            "'To,' block under the REF/Date lines (e.g. 'National Cargo (Pvt) Ltd.', "
-                            "'Commander International Pvt Limited', 'MYK Associates (Pvt) Ltd.'), "
-                            "as written; null if there is none. Read this field directly from the "
-                            "document — do NOT assume it is always Commander International."
+                            "The company the bank's letter is addressed to — the 'To,' block under the "
+                            "REF/Date lines (e.g. 'Commander International Pvt Limited', 'MYK Associates "
+                            "(Pvt) Ltd.'), as written; null if there is none"
                         ),
                     },
                     "addressee_bank": {
@@ -233,17 +216,7 @@ _FUNCTION = {
                     },
                     "customer_name": {
                         "type": ["string", "null"],
-                        "description": (
-                            "The BORROWER / PLEDGE HOLDER — the bank's client whose goods are under pledge "
-                            "(e.g. 'Canon Foam Industries (PVT) Ltd', 'Syed Flour Mills', 'M/s. ABC Company'). "
-                            "Find it in: the SUBJECT line ('Pledge A/C M/s. Syed Flour Mills', 'account of "
-                            "Cannon Foam Industries'), or the BODY ('on behalf of our client M/s. ...', "
-                            "'pledged with us by M/s. ...'). "
-                            "NEVER use the 'To:' addressee as customer_name — the 'To:' block is the "
-                            "muccadam/agent receiving the letter (e.g. 'Commander International', "
-                            "'National Cargo (Pvt) Ltd.'), NOT the customer. "
-                            "NEVER use the bank's name as customer_name."
-                        ),
+                        "description": "The client whose stock it is (who pledged it), e.g. 'Canon Foam Industries (PVT) Ltd', as written",
                     },
                     "pledge_location": {
                         "type": ["string", "null"],
@@ -284,11 +257,7 @@ _FUNCTION = {
                             "for an L/C letter, one line per kind of goods, with the quantity actually "
                             "shipped under THIS L/C (its bill of lading / the invoice's shipped quantity, "
                             "e.g. '1,800.000 MT') as quantity_received — not the L/C's maximum ('2000 MT "
-                            "minus 10 pct') and not a whole vessel's total from a surveyor's certificate. "
-                            "CRITICAL — SCANNED DOCUMENTS: copy the goods description EXACTLY as it appears "
-                            "in the table — do NOT substitute or invent goods names from your own knowledge "
-                            "(e.g. if the table says 'Wheat Bags 50Kgs', write 'Wheat Bags 50Kgs', never "
-                            "'Soyabean Oil' or any other commodity). Read the table cell by cell."
+                            "minus 10 pct') and not a whole vessel's total from a surveyor's certificate"
                         ),
                         "items": {
                             "type": "object",
@@ -381,10 +350,9 @@ _EXTRA_FIELDS = ("issuer_name", "issuer_is_bank", "classification_reason", "docu
 
 
 def _our_company_note() -> str:
-    """Tells the model who 'our company' is, for concerns_our_company.
-    Falls back to STOCK_ADDRESSEE_NAMES when OUR_COMPANY_NAMES is not set,
-    so scanned PDFs addressed to other muccadams are caught via concerns_our_company."""
-    names = settings.our_company_list or settings.stock_addressee_list
+    """Tells the model who 'our company' is (OUR_COMPANY_NAMES), for
+    concerns_our_company — it's a check, not a reason to reject."""
+    names = settings.our_company_list
     if not names:
         return ""
     return f"\n\nOur company (for concerns_our_company): {', '.join(names)}.\n\n"
@@ -393,11 +361,7 @@ def _our_company_note() -> str:
 # certificates) scanned into the same file after it.
 _ALL_PAGES_INSTRUCTION = (
     "The file may hold several documents — read every page, not just the first. The bank's "
-    "letter gives the main fields; record each document enclosed after it in document_details. "
-    "CLASSIFICATION: when the first page is a bank letter and later pages are trade documents "
-    "(bill of lading, commercial invoice, packing list, certificates of origin, insurance, "
-    "shipment advice), is_bank_document is True — the bank letter is the issuing document; "
-    "the enclosed trade documents do not change the classification to False."
+    "letter gives the main fields; record each document enclosed after it in document_details."
 )
 # A multi-document file's text runs long; 15k characters cut off its enclosures.
 _MAX_TEXT_CHARS = 60000
