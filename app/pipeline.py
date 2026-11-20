@@ -189,9 +189,11 @@ def _company_absent_from_doc(doc: Document) -> str | None:
     appears anywhere in the document text — meaning the bank sent a document
     intended for a different firm. Returns None (allow) when a name is found,
     when no names are configured, or when the document has no text layer (scanned
-    PDFs — those fall through to the LLM which checks via concerns_our_company)."""
+    PDFs — those fall through to the LLM which checks via concerns_our_company).
+    Email bodies are exempt: a bank email addressed TO us rarely names us in its
+    body, so the sender/CAD filter and the LLM handle those instead."""
     names = settings.stock_addressee_list
-    if not names or doc.text is None:
+    if not names or doc.text is None or doc.kind == "email":
         return None
     norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())
     normed = norm(doc.text)
@@ -377,9 +379,11 @@ def extract_document(db: Session, record: InvoiceRecord, doc: Document | None = 
             extracted: ExtractedInvoice = _DEFAULT_LLM_PARSER.parse_from_pdf_bytes(doc.pdf_bytes)
         elif doc.kind == "email":
             extracted = _DEFAULT_LLM_PARSER.parse_email(doc.text, doc.image_paths)
-            if not extracted.extra.get("bank_name"):
-                # An email counts only when the bank itself can be named
-                # (domain, signature, logo) — bank-sounding wording isn't enough.
+            if not extracted.extra.get("bank_name") and not extracted.extra.get("is_bank_document"):
+                # No bank name AND the LLM itself didn't flag it as a bank document —
+                # bank-sounding wording alone isn't enough. But if the LLM returned
+                # is_bank_document=True (e.g. it found a bank domain/signature), trust it
+                # even when bank_name wasn't extracted into the field.
                 extracted.extra["is_bank_document"] = False
         else:
             extracted = _DEFAULT_LLM_PARSER.parse(doc.text, doc.image_paths)
