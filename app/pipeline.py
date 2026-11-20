@@ -184,6 +184,22 @@ def _accept_takeover_request(extracted: ExtractedInvoice) -> None:
         extracted.extra["issuer_is_bank"] = True
 
 
+def _company_absent_from_doc(doc: Document) -> str | None:
+    """Returns a skip-reason when none of our company names (STOCK_ADDRESSEE_NAMES)
+    appears anywhere in the document text — meaning the bank sent a document
+    intended for a different firm. Returns None (allow) when a name is found,
+    when no names are configured, or when the document has no text layer (scanned
+    PDFs — those fall through to the LLM which checks via concerns_our_company)."""
+    names = settings.stock_addressee_list
+    if not names or doc.text is None:
+        return None
+    norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())
+    normed = norm(doc.text)
+    if any(norm(n) in normed for n in names):
+        return None
+    return f"'{names[0]}' not found in the document — appears addressed to a different company, skipped"
+
+
 def _addressed_to_other_company(extracted: ExtractedInvoice) -> str | None:
     """The addressee of a bank's delivery order when it isn't one of our muccadam
     companies (STOCK_ADDRESSEE_NAMES); None when it is ours, undetermined, or not
@@ -344,6 +360,17 @@ def extract_document(db: Session, record: InvoiceRecord, doc: Document | None = 
     if doc.kind == "pdf_text" and parse_statement(doc.text):
         _set_bank(record, _bank_in_text(doc.text))
         return _skip_statement(record)
+
+    # Pre-LLM gate: skip documents that don't mention our company at all.
+    # Banks sometimes accidentally include another firm's documents in the
+    # same email; a document for us always contains our name somewhere.
+    # Scanned PDFs (no text layer) are exempt — the LLM reads their pages.
+    not_ours = _company_absent_from_doc(doc)
+    if not_ours:
+        record.raw_extracted_json = json.dumps({"classification_reason": not_ours, "not_ours": True})
+        record.status = InvoiceStatus.NOT_BANK
+        logger.info("%s: %s", record.pdf_filename, not_ours)
+        return "not_bank"
 
     try:
         if doc.kind == "pdf_scanned":
