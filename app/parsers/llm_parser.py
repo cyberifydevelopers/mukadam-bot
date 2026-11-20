@@ -61,12 +61,18 @@ _FUNCTION = {
             "is_bank_document": {
                 "type": "boolean",
                 "description": (
-                    "True only if the document was ISSUED BY A BANK — on the bank's own letterhead "
-                    "(payment advice, transfer receipt, deposit slip, bank challan, remittance "
-                    "advice, delivery order, L/C or guarantee document, bank letter, statement). "
-                    "False when it is issued by anyone else, EVEN IF it is addressed to a bank or "
-                    "mentions a bank — e.g. a customer's request letter to a bank on the "
-                    "customer's own letterhead, a company invoice, a quotation, a CV."
+                    "True if the document (or the main/first page in a multi-document file) was "
+                    "ISSUED BY A BANK — on the bank's own letterhead (payment advice, transfer "
+                    "receipt, deposit slip, bank challan, remittance advice, delivery order, L/C "
+                    "or guarantee document, bank letter, statement). "
+                    "MULTI-DOCUMENT FILES: when a bank letter is on page 1 and trade documents "
+                    "(bill of lading, commercial invoice, packing list, certificates) follow as "
+                    "enclosures, classify as True — the bank letter is the issuing document; the "
+                    "enclosed trade documents do NOT change this to False. "
+                    "False only when NO page in the file is from a bank — e.g. a standalone "
+                    "company invoice, a client's request letter on their own letterhead (unless "
+                    "it is a Pledge Stock Takeover request, which goes in delivery_order), a "
+                    "quotation, or a CV."
                 ),
             },
             "classification_reason": {
@@ -387,7 +393,11 @@ def _our_company_note() -> str:
 # certificates) scanned into the same file after it.
 _ALL_PAGES_INSTRUCTION = (
     "The file may hold several documents — read every page, not just the first. The bank's "
-    "letter gives the main fields; record each document enclosed after it in document_details."
+    "letter gives the main fields; record each document enclosed after it in document_details. "
+    "CLASSIFICATION: when the first page is a bank letter and later pages are trade documents "
+    "(bill of lading, commercial invoice, packing list, certificates of origin, insurance, "
+    "shipment advice), is_bank_document is True — the bank letter is the issuing document; "
+    "the enclosed trade documents do not change the classification to False."
 )
 # A multi-document file's text runs long; 15k characters cut off its enclosures.
 _MAX_TEXT_CHARS = 60000
